@@ -1,7 +1,14 @@
-import { BOARD_PADDING, GRID_SIZE, TILE_GAP, TILE_SIZE } from './config.js';
+import { BOARD_PADDING, GRID_COLS, GRID_ROWS, TILE_GAP, TILE_SIZE } from './config.js';
 import { getPixi } from './pixi.js';
 
 const wallKey = (x, y) => `${x},${y}`;
+const OBJECT_SCALE = {
+  key: 0.96,
+  portal: 1.66,
+};
+const OBJECT_OFFSET = {
+  keyBottom: -0.08,
+};
 
 export class Board {
   constructor(stage, walls, keyCells, portalCell, textures) {
@@ -20,28 +27,36 @@ export class Board {
     this.container = new this.PIXI.Container();
     this.stage.addChild(this.container);
     this.objectLayer = new this.PIXI.Container();
+    this.objectLayer.sortableChildren = true;
     this.portalSprite = null;
 
-    this.gridPixelSize = GRID_SIZE * TILE_SIZE + (GRID_SIZE - 1) * TILE_GAP;
-    this.boardPixelSize = this.gridPixelSize + BOARD_PADDING * 2;
+    this.gridPixelWidth = GRID_COLS * TILE_SIZE + (GRID_COLS - 1) * TILE_GAP;
+    this.gridPixelHeight = GRID_ROWS * TILE_SIZE + (GRID_ROWS - 1) * TILE_GAP;
+    this.boardPixelWidth = this.gridPixelWidth + BOARD_PADDING * 2;
+    this.boardPixelHeight = this.gridPixelHeight + BOARD_PADDING * 2;
 
     this.draw();
   }
 
   layout(viewWidth, viewHeight) {
-    this.container.x = Math.floor((viewWidth - this.boardPixelSize) / 2);
-    this.container.y = Math.floor((viewHeight - this.boardPixelSize) / 2);
+    const scaleX = (viewWidth * 0.95) / this.boardPixelWidth;
+    const scaleY = (viewHeight * 0.95) / this.boardPixelHeight;
+    const boardScale = Math.min(scaleX, scaleY);
+
+    this.container.scale.set(boardScale);
+    this.container.x = Math.floor((viewWidth - this.boardPixelWidth * boardScale) * 0.5);
+    this.container.y = Math.floor(viewHeight * 0.05);
   }
 
   draw() {
-    const bg = new this.PIXI.Graphics();
-    bg.beginFill(0xffffff);
-    bg.drawRoundedRect(0, 0, this.boardPixelSize, this.boardPixelSize, 24);
-    bg.endFill();
-    this.container.addChild(bg);
+    for (let y = 0; y < GRID_ROWS; y += 1) {
+      for (let x = 0; x < GRID_COLS; x += 1) {
+        const isOuter =
+          y === 0 || y === GRID_ROWS - 1 || x === 0 || x === GRID_COLS - 1;
+        if (isOuter) {
+          continue;
+        }
 
-    for (let y = 0; y < GRID_SIZE; y += 1) {
-      for (let x = 0; x < GRID_SIZE; x += 1) {
         const tile = new this.PIXI.Sprite(this.textures.tile);
         tile.width = TILE_SIZE;
         tile.height = TILE_SIZE;
@@ -58,7 +73,8 @@ export class Board {
           wall.height = TILE_SIZE;
           wall.x = world.x;
           wall.y = world.y;
-          this.container.addChild(wall);
+          wall.zIndex = wall.y + TILE_SIZE;
+          this.objectLayer.addChild(wall);
         }
       }
     }
@@ -68,7 +84,7 @@ export class Board {
   }
 
   renderObjects() {
-    this.objectLayer.removeChildren();
+    this.clearBoardObjects();
     this.renderPortal();
     this.renderKeys();
   }
@@ -76,25 +92,27 @@ export class Board {
   renderKeys() {
     for (const key of this.keyCells) {
       const [x, y] = key.split(',').map(Number);
-      const keyGraphic = new this.PIXI.Sprite(this.textures.key);
-      keyGraphic.width = TILE_SIZE;
-      keyGraphic.height = TILE_SIZE;
+      const keyGraphic = this.createObjectSprite(this.textures.key, OBJECT_SCALE.key);
+      keyGraphic.anchor.set(0.5, 1);
       const pos = this.toPixel(x, y);
-      keyGraphic.x = pos.x;
-      keyGraphic.y = pos.y;
+      keyGraphic.x = pos.x + TILE_SIZE * 0.5;
+      keyGraphic.y = pos.y + TILE_SIZE * (1 + OBJECT_OFFSET.keyBottom);
+      keyGraphic.zIndex = keyGraphic.y;
+      keyGraphic.boardObject = true;
       this.objectLayer.addChild(keyGraphic);
     }
   }
 
   renderPortal() {
-    const portal = new this.PIXI.Sprite(
-      this.portalActive ? this.textures.portalOn : this.textures.portalOff
+    const portal = this.createObjectSprite(
+      this.portalActive ? this.textures.portalOn : this.textures.portalOff,
+      OBJECT_SCALE.portal
     );
-    portal.width = TILE_SIZE;
-    portal.height = TILE_SIZE;
     const pos = this.toPixel(this.portalCell.x, this.portalCell.y);
-    portal.x = pos.x;
-    portal.y = pos.y;
+    portal.x = pos.x + TILE_SIZE * 0.5;
+    portal.y = pos.y + TILE_SIZE * 0.5;
+    portal.zIndex = portal.y;
+    portal.boardObject = true;
     this.objectLayer.addChild(portal);
     this.portalSprite = portal;
   }
@@ -104,7 +122,7 @@ export class Board {
   }
 
   isInside(x, y) {
-    return x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE;
+    return x >= 0 && x < GRID_COLS && y >= 0 && y < GRID_ROWS;
   }
 
   canStand(x, y) {
@@ -145,10 +163,33 @@ export class Board {
     this.renderObjects();
   }
 
+  clearBoardObjects() {
+    for (let i = this.objectLayer.children.length - 1; i >= 0; i -= 1) {
+      const child = this.objectLayer.children[i];
+      if (child.boardObject) {
+        this.objectLayer.removeChildAt(i);
+      }
+    }
+  }
+
   toPixel(gridX, gridY) {
     return {
       x: BOARD_PADDING + gridX * (TILE_SIZE + TILE_GAP),
       y: BOARD_PADDING + gridY * (TILE_SIZE + TILE_GAP),
     };
+  }
+
+  createObjectSprite(texture, scaleFactor) {
+    const sprite = new this.PIXI.Sprite(texture);
+    sprite.anchor.set(0.5);
+
+    const base = TILE_SIZE * scaleFactor;
+    const texW = texture.width || 1;
+    const texH = texture.height || 1;
+    const fitScale = base / Math.max(texW, texH);
+    sprite.width = texW * fitScale;
+    sprite.height = texH * fitScale;
+
+    return sprite;
   }
 }

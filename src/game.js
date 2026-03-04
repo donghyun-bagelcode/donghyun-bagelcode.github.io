@@ -9,6 +9,16 @@ let debugUi = null;
 let keyHudEl = null;
 let clearEl = null;
 let resetButtonEl = null;
+let pendingSlideOutcome = null;
+
+const TOP_UI = {
+  height: 36,
+  radius: 10,
+  paddingX: 12,
+  font: "600 14px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+  background: 'rgba(17,24,39,0.88)',
+  color: '#f9fafb',
+};
 
 const bootstrap = async () => {
   const root = document.getElementById('app');
@@ -43,6 +53,7 @@ const bootstrap = async () => {
   const layout = () => {
     layoutBackground(background, app);
     board.layout(app.renderer.width, app.renderer.height);
+    layoutHudByBoard(root, board);
   };
   layout();
 
@@ -67,20 +78,7 @@ const bootstrap = async () => {
       const moved = slideResult.moved;
 
       if (moved) {
-        const gained = board.collectKeysOnPath(slideResult.path);
-        if (gained > 0) {
-          state.keyCollected += gained;
-          if (state.keyCollected >= state.keyGoal && !state.portalActive) {
-            state.portalActive = true;
-            board.setPortalActive(true);
-          }
-        }
-
-        if (state.portalActive && board.isPortalOnPath(slideResult.path)) {
-          state.clear = true;
-          showClear();
-        }
-        updateHud(state);
+        pendingSlideOutcome = { path: slideResult.path, applied: false };
       }
 
       const after = player.getGridPosition();
@@ -110,6 +108,7 @@ const bootstrap = async () => {
     state.keyCollected = 0;
     state.clear = false;
     state.portalActive = false;
+    pendingSlideOutcome = null;
     player.resetTo(PLAYER_START);
     board.resetObjects();
     hideClear();
@@ -122,9 +121,39 @@ const bootstrap = async () => {
   app.ticker.add(() => {
     const deltaMs = app.ticker.deltaMS;
     player.update(deltaMs);
+
+    if (pendingSlideOutcome && !pendingSlideOutcome.applied && player.getAnimationProgress() >= 0.9) {
+      applySlideOutcome(board, state, pendingSlideOutcome.path);
+      pendingSlideOutcome.applied = true;
+    }
+
+    if (pendingSlideOutcome && !player.isAnimating()) {
+      if (!pendingSlideOutcome.applied) {
+        applySlideOutcome(board, state, pendingSlideOutcome.path);
+      }
+      pendingSlideOutcome = null;
+    }
+
     const pos = player.getGridPosition();
     debugUi.setState({ grid: `(${pos.x}, ${pos.y})`, animating: player.isAnimating() });
   });
+};
+
+const applySlideOutcome = (board, state, path) => {
+  const gained = board.collectKeysOnPath(path);
+  if (gained > 0) {
+    state.keyCollected += gained;
+    if (state.keyCollected >= state.keyGoal && !state.portalActive) {
+      state.portalActive = true;
+      board.setPortalActive(true);
+    }
+  }
+
+  if (state.portalActive && board.isPortalOnPath(path)) {
+    state.clear = true;
+    showClear();
+  }
+  updateHud(state);
 };
 
 const createPixiApp = async (root) => {
@@ -181,7 +210,7 @@ const loadTextures = async () => {
     bg: PIXI.Assets.get('bg'),
     tile: PIXI.Assets.get('tile'),
     wall: PIXI.Assets.get('wall'),
-    character: PIXI.Assets.get('character'),
+    characterSheet: PIXI.Assets.get('characterSheet'),
     key: PIXI.Assets.get('key'),
     portalOff: PIXI.Assets.get('portalOff'),
     portalOn: PIXI.Assets.get('portalOn'),
@@ -239,27 +268,52 @@ const createHud = (root) => {
   keyHudEl = document.createElement('div');
   keyHudEl.style.position = 'fixed';
   keyHudEl.style.top = '12px';
-  keyHudEl.style.left = '12px';
+  keyHudEl.style.left = '50%';
+  keyHudEl.style.transform = 'translateX(-50%)';
   keyHudEl.style.zIndex = '9000';
-  keyHudEl.style.padding = '8px 10px';
-  keyHudEl.style.borderRadius = '10px';
-  keyHudEl.style.background = 'rgba(17,24,39,0.85)';
-  keyHudEl.style.color = '#f9fafb';
-  keyHudEl.style.font = '600 14px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+  keyHudEl.style.padding = `0 ${TOP_UI.paddingX}px`;
+  keyHudEl.style.height = `${TOP_UI.height}px`;
+  keyHudEl.style.display = 'flex';
+  keyHudEl.style.alignItems = 'center';
+  keyHudEl.style.borderRadius = `${TOP_UI.radius}px`;
+  keyHudEl.style.background = TOP_UI.background;
+  keyHudEl.style.color = TOP_UI.color;
+  keyHudEl.style.font = TOP_UI.font;
+  keyHudEl.style.whiteSpace = 'nowrap';
+  keyHudEl.style.textTransform = 'uppercase';
 
   resetButtonEl = document.createElement('button');
   resetButtonEl.textContent = 'Reset';
   resetButtonEl.style.position = 'fixed';
-  resetButtonEl.style.bottom = '16px';
-  resetButtonEl.style.right = '16px';
+  resetButtonEl.style.top = '16px';
+  resetButtonEl.style.left = '50%';
+  resetButtonEl.style.transform = 'translateX(-50%)';
   resetButtonEl.style.zIndex = '9000';
   resetButtonEl.style.border = '0';
-  resetButtonEl.style.borderRadius = '10px';
-  resetButtonEl.style.padding = '10px 14px';
-  resetButtonEl.style.background = '#111827';
-  resetButtonEl.style.color = '#f9fafb';
-  resetButtonEl.style.font = '600 14px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+  resetButtonEl.style.borderRadius = `${TOP_UI.radius}px`;
+  resetButtonEl.style.padding = `0 ${TOP_UI.paddingX}px`;
+  resetButtonEl.style.height = `${TOP_UI.height}px`;
+  resetButtonEl.style.background = TOP_UI.background;
+  resetButtonEl.style.color = TOP_UI.color;
+  resetButtonEl.style.font = TOP_UI.font;
+  resetButtonEl.style.whiteSpace = 'nowrap';
   resetButtonEl.style.cursor = 'pointer';
+  resetButtonEl.style.textTransform = 'uppercase';
+
+  const debugButton = debugUi?.button ?? null;
+  if (debugButton) {
+    debugButton.style.zIndex = '9000';
+    debugButton.style.border = '0';
+    debugButton.style.borderRadius = `${TOP_UI.radius}px`;
+    debugButton.style.padding = `0 ${TOP_UI.paddingX}px`;
+    debugButton.style.height = `${TOP_UI.height}px`;
+    debugButton.style.background = TOP_UI.background;
+    debugButton.style.color = TOP_UI.color;
+    debugButton.style.font = TOP_UI.font;
+    debugButton.style.lineHeight = '1.2';
+    debugButton.style.whiteSpace = 'nowrap';
+    debugButton.style.textTransform = 'uppercase';
+  }
 
   clearEl = document.createElement('div');
   clearEl.textContent = 'CLEAR!';
@@ -278,6 +332,55 @@ const createHud = (root) => {
   root.appendChild(keyHudEl);
   root.appendChild(resetButtonEl);
   root.appendChild(clearEl);
+};
+
+const layoutHudByBoard = (root, board) => {
+  if (!keyHudEl || !resetButtonEl) {
+    return;
+  }
+
+  const boardTop = board.container.y;
+  const boardWidth = board.boardPixelWidth * board.container.scale.x;
+  const boardCenterX = board.container.x + boardWidth * 0.5;
+  const margin = 12;
+  const gap = 12;
+  const itemGap = 10;
+
+  const keyHeight = keyHudEl.offsetHeight || 32;
+  const keyWidth = keyHudEl.offsetWidth || 90;
+  const resetHeight = resetButtonEl.offsetHeight || 40;
+  const resetWidth = resetButtonEl.offsetWidth || 84;
+  const debugButton = debugUi?.button ?? null;
+  const debugHeight = debugButton?.offsetHeight || 30;
+  const debugWidth = debugButton?.offsetWidth || 70;
+
+  const rowHeight = Math.max(keyHeight, resetHeight, debugHeight);
+  const rowTop = Math.max(margin, boardTop - rowHeight - gap);
+  const rowWidth = keyWidth + itemGap + resetWidth + itemGap + debugWidth;
+  const rowLeft = boardCenterX - rowWidth * 0.5;
+
+  keyHudEl.style.transform = 'none';
+  keyHudEl.style.left = `${Math.round(rowLeft)}px`;
+  keyHudEl.style.top = `${Math.round(rowTop)}px`;
+
+  const resetLeft = rowLeft + keyWidth + itemGap;
+  resetButtonEl.style.transform = 'none';
+  resetButtonEl.style.left = `${Math.round(resetLeft)}px`;
+  resetButtonEl.style.top = `${Math.round(rowTop)}px`;
+
+  if (debugButton) {
+    const debugLeft = resetLeft + resetWidth + itemGap;
+    debugButton.style.right = 'auto';
+    debugButton.style.transform = 'none';
+    debugButton.style.left = `${Math.round(debugLeft)}px`;
+    debugButton.style.top = `${Math.round(rowTop)}px`;
+
+    if (debugUi?.panel) {
+      debugUi.panel.style.right = 'auto';
+      debugUi.panel.style.left = `${Math.round(debugLeft)}px`;
+      debugUi.panel.style.top = `${Math.round(rowTop + (debugHeight || TOP_UI.height) + 8)}px`;
+    }
+  }
 };
 
 const updateHud = (state) => {
@@ -300,8 +403,8 @@ const hideClear = () => {
 };
 
 const getPlayerRendererPosition = (player, board) => ({
-  x: board.container.x + player.sprite.x,
-  y: board.container.y + player.sprite.y,
+  x: board.container.x + player.sprite.x * board.container.scale.x,
+  y: board.container.y + player.sprite.y * board.container.scale.y,
 });
 
 const setupGlobalErrorCapture = () => {

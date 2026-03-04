@@ -1,7 +1,8 @@
-export const GRID_SIZE = 9;
+export const GRID_COLS = 7;
+export const GRID_ROWS = 10;
 export const TILE_SIZE = 64;
-export const TILE_GAP = 8;
-export const BOARD_PADDING = 20;
+export const TILE_GAP = 0;
+export const BOARD_PADDING = 0;
 export const SLIDE_DURATION_MS = 260;
 
 export const COLORS = {
@@ -18,27 +19,34 @@ export const ASSET_PATHS = {
   bg: './image/BG_3.png',
   tile: './image/tile.png',
   wall: './image/block.png',
-  character: './image/character.png',
+  characterSheet: './image/character-knight.png',
   key: './image/key.png',
   portalOff: './image/portal_off.png',
   portalOn: './image/portal_on.png',
 };
 
+export const OBJECT_SCALE = {
+  character: 1.28,
+  key: 1.18,
+  portal: 1.36,
+};
+
 export const STAGE_LAYOUT_W1_S1 = [
-  '#########',
-  '#..P....#',
-  '#.###...#',
-  '#..k.k..#',
-  '#...S...#',
-  '#.....#.#',
-  '#...###.#',
-  '#.......#',
-  '#########',
+  '#######',
+  '#..P..#',
+  '#.##..#',
+  '#..k.k#',
+  '#..S..#',
+  '#....##',
+  '#.###k#',
+  '#.....#',
+  '#.....#',
+  '#######',
 ];
 
 const parseStageLayout = (rows) => {
-  if (rows.length !== GRID_SIZE) {
-    throw new Error(`스테이지 행 수가 GRID_SIZE(${GRID_SIZE})와 다릅니다.`);
+  if (rows.length !== GRID_ROWS) {
+    throw new Error(`스테이지 행 수가 GRID_ROWS(${GRID_ROWS})와 다릅니다.`);
   }
 
   const walls = [];
@@ -48,8 +56,8 @@ const parseStageLayout = (rows) => {
 
   for (let y = 0; y < rows.length; y += 1) {
     const row = rows[y];
-    if (row.length !== GRID_SIZE) {
-      throw new Error(`스테이지 열 수가 GRID_SIZE(${GRID_SIZE})와 다릅니다. y=${y}`);
+    if (row.length !== GRID_COLS) {
+      throw new Error(`스테이지 열 수가 GRID_COLS(${GRID_COLS})와 다릅니다. y=${y}`);
     }
 
     for (let x = 0; x < row.length; x += 1) {
