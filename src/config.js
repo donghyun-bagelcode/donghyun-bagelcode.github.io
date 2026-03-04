@@ -16,13 +16,13 @@ export const COLORS = {
 };
 
 export const ASSET_PATHS = {
-  bg: './image/BG_3.png',
-  tile: './image/tile.png',
-  wall: './image/block.png',
-  characterSheet: './image/character-knight.png',
-  key: './image/key.png',
-  portalOff: './image/portal_off.png',
-  portalOn: './image/portal_on.png',
+  bg: './image/ingame/BG_3.png',
+  tile: './image/ingame/tile.png',
+  wall: './image/ingame/block.png',
+  characterSheet: './image/ingame/character-knight.png',
+  key: './image/ingame/key.png',
+  portalOff: './image/ingame/portal_off.png',
+  portalOn: './image/ingame/portal_on.png',
 };
 
 export const OBJECT_SCALE = {

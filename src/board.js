@@ -48,6 +48,16 @@ export class Board {
     this.container.y = Math.floor(viewHeight * 0.05);
   }
 
+  layoutInRect(rect) {
+    const scaleX = (rect.width * 0.95) / this.boardPixelWidth;
+    const scaleY = (rect.height * 0.95) / this.boardPixelHeight;
+    const boardScale = Math.min(scaleX, scaleY);
+
+    this.container.scale.set(boardScale);
+    this.container.x = Math.floor(rect.x + (rect.width - this.boardPixelWidth * boardScale) * 0.5);
+    this.container.y = Math.floor(rect.y + rect.height * 0.05);
+  }
+
   draw() {
     for (let y = 0; y < GRID_ROWS; y += 1) {
       for (let x = 0; x < GRID_COLS; x += 1) {
