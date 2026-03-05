@@ -1,6 +1,9 @@
 import { ASSET_PATHS } from './config.js';
 import { createGameScene } from './game.js';
 import { createLobbyScene } from './lobby.js';
+import { getTotalStars, getUnlockedStageId, loadProgress, saveStageResult } from './save-data.js';
+import { createSplashScene } from './splash.js';
+import { createWorldScene } from './world.js';
 import { getPixi, waitForPixi } from './pixi.js';
 import { SceneManager } from './scene-manager.js';
 
@@ -10,6 +13,8 @@ const LOBBY_ASSET_PATHS = {
   stageBlue: './image/lobby/stage_blue.png',
   stageRed: './image/lobby/stage_red.png',
   stageCurrent: './image/lobby/stage_1.png',
+  worldText: './image/lobby/world-text.png',
+  num0: './image/lobby/num_0.png',
   num1: './image/lobby/num_1.png',
   num2: './image/lobby/num_2.png',
   num3: './image/lobby/num_3.png',
@@ -20,10 +25,53 @@ const LOBBY_ASSET_PATHS = {
   num8: './image/lobby/num_8.png',
   num9: './image/lobby/num_9.png',
   starCollect: './image/lobby/star-collect.png',
+  star: './image/lobby/star.png',
   back: './image/lobby/back.png',
   home: './image/lobby/home.png',
   pageButton: './image/lobby/page-button.png',
   lobbyCharacter: './image/lobby/character.png',
+};
+
+const WORLD_ASSET_PATHS = {
+  worldBg: './image/world/World-select_BG.png',
+  worldTitle: './image/world/World select.png',
+  world1: './image/world/1.png',
+  world2dim: './image/world/2_dim.png',
+  world3dim: './image/world/3_dim.png',
+  world4dim: './image/world/4_dim.png',
+  world5dim: './image/world/5_dim.png',
+};
+
+const SPLASH_ASSET_PATHS = {
+  splashBg: './image/splash/Splash_BG.png',
+  splashTitle: './image/splash/Splash_title.png',
+  splashLight1: './image/splash/light_1_title.png',
+  splashLight2: './image/splash/light_2_sword.png',
+  splashBar: './image/splash/loading bar.png',
+  splashGage: './image/splash/loading bar gauge.png',
+  splashLoadingText: './image/splash/loading.png',
+  splashDot: './image/splash/loading_dot.png',
+};
+
+const POPUP_ASSET_PATHS = {
+  popupBg: './image/popup/bg.png',
+  popupComplete: './image/popup/complete.png',
+  popupStage: './image/popup/stage_.png',
+  popupStar: './image/popup/star.png',
+  popupStarEmpty: './image/popup/star_empty.png',
+  popupReplay: './image/popup/btn replay.png',
+  popupNext: './image/popup/btn next.png',
+  popupExit: './image/popup/btn_exit.png',
+  popupNum0: './image/popup/num_0.png',
+  popupNum1: './image/popup/num_1.png',
+  popupNum2: './image/popup/num_2.png',
+  popupNum3: './image/popup/num_3.png',
+  popupNum4: './image/popup/num_4.png',
+  popupNum5: './image/popup/num_5.png',
+  popupNum6: './image/popup/num_6.png',
+  popupNum7: './image/popup/num_7.png',
+  popupNum8: './image/popup/num_8.png',
+  popupNum9: './image/popup/num_9.png',
 };
 
 const bootstrap = async () => {
@@ -35,31 +83,60 @@ const bootstrap = async () => {
   const app = await createPixiApp(root);
   root.appendChild(app.canvas ?? app.view);
 
-  const textures = await loadTextures({ ...ASSET_PATHS, ...LOBBY_ASSET_PATHS });
+  const textures = await loadTextures({
+    ...ASSET_PATHS,
+    ...LOBBY_ASSET_PATHS,
+    ...WORLD_ASSET_PATHS,
+    ...SPLASH_ASSET_PATHS,
+    ...POPUP_ASSET_PATHS,
+  });
 
   const sceneManager = new SceneManager(app.stage);
+
+  const splashScene = createSplashScene({
+    app,
+    textures,
+    onComplete: () => sceneManager.switchScene('world'),
+  });
+
+  const worldScene = createWorldScene({
+    app,
+    textures,
+    onSelectWorld: () => sceneManager.switchScene('lobby'),
+  });
 
   const gameScene = createGameScene({
     app,
     root,
     textures,
     onGoLobby: () => sceneManager.switchScene('lobby'),
+    onStageClear: (stageId, stars) => {
+      saveStageResult(stageId, stars);
+    },
   });
 
   const lobbyScene = createLobbyScene({
     app,
     textures,
+    getProgress: () => ({
+      progress: loadProgress(),
+      unlockedStageId: getUnlockedStageId(),
+      totalStars: getTotalStars(),
+    }),
+    onGoWorld: () => sceneManager.switchScene('world'),
     onSelectStage: (stageId) => {
       sceneManager.switchScene('game', { stageId });
     },
   });
 
+  sceneManager.register('splash', splashScene);
+  sceneManager.register('world', worldScene);
   sceneManager.register('lobby', lobbyScene);
   sceneManager.register('game', gameScene);
 
   window.addEventListener('resize', () => sceneManager.resize());
 
-  sceneManager.switchScene('lobby');
+  sceneManager.switchScene('splash');
 };
 
 const createPixiApp = async (root) => {

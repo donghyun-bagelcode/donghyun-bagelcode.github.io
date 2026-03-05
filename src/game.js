@@ -1,7 +1,7 @@
 import { Board } from './board.js';
-import { KEY_CELLS, MAP_WALLS, PLAYER_START, PORTAL_CELL } from './config.js';
+import { getStage, STAGE_COUNT, SWIPE_MIN_DISTANCE } from './config.js';
 import { DebugUI } from './debug-ui.js';
-import { DirectionClickInput } from './input.js';
+import { SwipeInput } from './input.js';
 import { Player } from './player.js';
 import { getPixi } from './pixi.js';
 
@@ -19,7 +19,29 @@ const TOP_UI = {
   color: '#f9fafb',
 };
 
-export const createGameScene = ({ app, root, textures, onGoLobby }) => {
+const PIXI_HUD = {
+  keyNumberH: 60,
+  keySlashH: 42,
+  moveBoardW: 340,
+  moveLabelW: 126,
+  moveDigitH: 46,
+  moveDigitGap: 8,
+};
+
+const POPUP_UI = {
+  bgW: 560,
+  bgY: 980,
+  completeW: 360,
+  stageW: 150,
+  stageNumH: 48,
+  starW: 88,
+  starsGap: 104,
+  replayW: 184,
+  nextW: 184,
+  exitW: 86,
+};
+
+export const createGameScene = ({ app, root, textures, onGoLobby, onStageClear }) => {
   const PIXI = getPixi();
   if (!PIXI) {
     throw new Error('PixiJS 인스턴스를 찾지 못했습니다.');
@@ -30,6 +52,7 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
 
   const frame = new PIXI.Container();
   container.addChild(frame);
+  const hudOverlay = new PIXI.Container();
 
   const background = new PIXI.Sprite(textures.bg);
   background.x = 0;
@@ -38,22 +61,39 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
   background.height = DESIGN_H;
   frame.addChild(background);
 
-  const board = new Board(frame, MAP_WALLS, KEY_CELLS, PORTAL_CELL, textures);
-  const player = new Player(board, PLAYER_START, textures);
+  let board = null;
+  let player = null;
+  let currentStage = null;
 
   const state = {
     keyCollected: 0,
-    keyGoal: KEY_CELLS.length,
+    keyGoal: 0,
+    moveCount: 0,
+    stars: 0,
     clear: false,
     portalActive: false,
     active: false,
     stageId: 1,
   };
 
-  let keyHudEl = null;
-  let clearEl = null;
+  let keyHudContainer = null;
+  let keyCurrentSprite = null;
+  let keySlashSprite = null;
+  let keyGoalSprite = null;
+  let moveHudContainer = null;
+  let moveBoardSprite = null;
+  let moveLabelSprite = null;
+  let moveDigitsContainer = null;
+  let popupContainer = null;
+  let popupBgSprite = null;
+  let popupCompleteSprite = null;
+  let popupStageSprite = null;
+  let popupStageDigitsContainer = null;
+  let popupStarSprites = [];
+  let popupReplayBtn = null;
+  let popupNextBtn = null;
+  let popupExitBtn = null;
   let resetButtonEl = null;
-  let homeButtonEl = null;
   let backButtonEl = null;
   let pendingSlideOutcome = null;
 
@@ -66,11 +106,10 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
   updateHud();
   setUiVisible(false);
 
-  const input = new DirectionClickInput(
+  const input = new SwipeInput(
     app.canvas ?? app.view,
-    () => getPlayerRendererPosition(player, board, frame),
     (direction) => {
-      if (!state.active || state.clear) {
+      if (!state.active || state.clear || !board || !player || !currentStage) {
         return;
       }
 
@@ -79,10 +118,12 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
       const slideResult = wasAnimating
         ? { moved: false, path: [] }
         : player.trySlide(direction, {
-            stopAtCell: (x, y) => state.portalActive && x === PORTAL_CELL.x && y === PORTAL_CELL.y,
+            stopAtCell: (x, y) =>
+              state.portalActive && x === currentStage.portal.x && y === currentStage.portal.y,
           });
 
       if (slideResult.moved) {
+        state.moveCount += 1;
         pendingSlideOutcome = { path: slideResult.path, applied: false };
       }
 
@@ -92,27 +133,7 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
       );
       debugUi?.setState({ grid: `(${after.x}, ${after.y})`, animating: player.isAnimating() });
     },
-    {
-      onClick: ({ x, y, originX, originY, dx, dy }) => {
-        if (!state.active) {
-          return;
-        }
-        debugUi?.logInput(
-          `click at=(${Math.round(x)},${Math.round(y)}) origin=(${Math.round(originX)},${Math.round(
-            originY
-          )}) dx=${Math.round(dx)} dy=${Math.round(dy)}`
-        );
-      },
-      onDecision: ({ accepted, directionName, reason, dx, dy }) => {
-        if (!state.active) {
-          return;
-        }
-        const direction = directionName ?? `rejected:${reason}`;
-        debugUi?.logInput(
-          `decision dx=${Math.round(dx)} dy=${Math.round(dy)} dir=${direction} accepted=${accepted}`
-        );
-      },
-    }
+    { minDistance: SWIPE_MIN_DISTANCE }
   );
 
   resetButtonEl.addEventListener('click', () => {
@@ -123,16 +144,12 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
     debugUi?.logInput('reset');
   });
 
-  homeButtonEl.addEventListener('click', () => {
-    onGoLobby?.();
-  });
-
   backButtonEl.addEventListener('click', () => {
     onGoLobby?.();
   });
 
   const tickerUpdate = () => {
-    if (!state.active) {
+    if (!state.active || !board || !player) {
       return;
     }
 
@@ -158,21 +175,21 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
 
   const onResize = () => {
     layoutVirtualFrame(frame, app.renderer.width, app.renderer.height);
+    if (!board) {
+      return;
+    }
     board.layout(DESIGN_W, DESIGN_H);
-    layoutHudByBoard(board, frame);
+    layoutHudByBoard(board);
   };
 
   const onEnter = (ctx = {}) => {
     const payload = ctx.payload ?? ctx;
     state.active = true;
-
-    if (payload.stageId) {
-      state.stageId = payload.stageId;
-      if (state.stageId !== 1) {
-        state.stageId = 1;
-      }
-      resetGameplay();
+    const nextStageId = resolveStageId(payload.stageId ?? state.stageId);
+    if (!board || nextStageId !== state.stageId) {
+      buildStage(nextStageId);
     }
+    resetGameplay();
 
     onResize();
     setUiVisible(true);
@@ -190,7 +207,7 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
   };
 
   const loadStage = (stageId) => {
-    state.stageId = stageId;
+    buildStage(stageId);
     resetGameplay();
   };
 
@@ -198,9 +215,14 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
     setUiVisible(false);
     app.ticker.remove(tickerUpdate);
     input.targetElement?.removeEventListener?.('pointerdown', input.handlePointerDown);
+    input.targetElement?.removeEventListener?.('pointerup', input.handlePointerUp);
+    input.targetElement?.removeEventListener?.('pointercancel', input.handlePointerCancel);
   };
 
   const applySlideOutcome = (path) => {
+    if (!board || !currentStage) {
+      return;
+    }
     const gained = board.collectKeysOnPath(path);
     if (gained > 0) {
       state.keyCollected += gained;
@@ -212,19 +234,27 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
 
     if (state.portalActive && board.isPortalOnPath(path)) {
       state.clear = true;
-      showClear();
+      state.stars = calculateStars(currentStage.minMoves, state.moveCount);
+      onStageClear?.(state.stageId, state.stars);
+      showClear(state.stars);
     }
 
     updateHud();
   };
 
   const resetGameplay = () => {
+    if (!board || !player || !currentStage) {
+      return;
+    }
     state.keyCollected = 0;
+    state.moveCount = 0;
+    state.stars = 0;
     state.clear = false;
     state.portalActive = false;
     pendingSlideOutcome = null;
+    state.keyGoal = currentStage.keys.length;
 
-    player.resetTo(PLAYER_START);
+    player.resetTo(currentStage.start);
     board.resetObjects();
     hideClear();
     updateHud();
@@ -233,64 +263,179 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
     debugUi?.setState({ grid: `(${pos.x}, ${pos.y})`, animating: player.isAnimating() });
   };
 
+  const buildStage = (stageId) => {
+    const nextStageId = resolveStageId(stageId);
+    const stageData = getStage(nextStageId);
+
+    if (board) {
+      frame.removeChild(board.container);
+    }
+
+    board = new Board(frame, stageData.walls, stageData.keys, stageData.portal, textures);
+    player = new Player(board, stageData.start, textures);
+    frame.addChild(hudOverlay);
+    currentStage = stageData;
+    state.stageId = nextStageId;
+    state.keyGoal = stageData.keys.length;
+    pendingSlideOutcome = null;
+  };
+
   function createHud() {
-    keyHudEl = document.createElement('div');
-    keyHudEl.style.position = 'fixed';
-    keyHudEl.style.zIndex = '9000';
-    keyHudEl.style.padding = `0 ${TOP_UI.paddingX}px`;
-    keyHudEl.style.height = `${TOP_UI.height}px`;
-    keyHudEl.style.display = 'flex';
-    keyHudEl.style.alignItems = 'center';
-    keyHudEl.style.borderRadius = `${TOP_UI.radius}px`;
-    keyHudEl.style.background = TOP_UI.background;
-    keyHudEl.style.color = TOP_UI.color;
-    keyHudEl.style.font = TOP_UI.font;
-    keyHudEl.style.whiteSpace = 'nowrap';
-    keyHudEl.style.textTransform = 'uppercase';
+    createPixiHud();
+    createPopup();
 
     resetButtonEl = document.createElement('button');
     resetButtonEl.textContent = 'Reset';
     applyTopButtonStyle(resetButtonEl);
 
-    homeButtonEl = document.createElement('button');
-    homeButtonEl.textContent = 'Home';
-    applyTopButtonStyle(homeButtonEl);
-
     backButtonEl = document.createElement('button');
     backButtonEl.textContent = 'Back';
     applyTopButtonStyle(backButtonEl);
+    backButtonEl.style.height = '28px';
+    backButtonEl.style.padding = '0 10px';
+    backButtonEl.style.font = "600 12px/1.1 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    backButtonEl.style.borderRadius = '8px';
+    backButtonEl.style.top = '12px';
+    backButtonEl.style.left = '12px';
+    backButtonEl.style.position = 'fixed';
+    backButtonEl.style.zIndex = '9100';
 
-    clearEl = document.createElement('div');
-    clearEl.textContent = 'CLEAR!';
-    clearEl.style.position = 'fixed';
-    clearEl.style.zIndex = '9001';
-    clearEl.style.padding = '14px 24px';
-    clearEl.style.borderRadius = '12px';
-    clearEl.style.background = 'rgba(39,174,96,0.92)';
-    clearEl.style.color = '#ffffff';
-    clearEl.style.font = '700 28px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
-    clearEl.style.display = 'none';
-
-    root.appendChild(keyHudEl);
     root.appendChild(resetButtonEl);
-    root.appendChild(homeButtonEl);
     root.appendChild(backButtonEl);
-    root.appendChild(clearEl);
+
+    resetButtonEl.style.display = 'none';
+    backButtonEl.style.display = '';
 
     const debugButton = debugUi?.button ?? null;
     if (debugButton) {
-      debugButton.style.zIndex = '9000';
-      debugButton.style.border = '0';
-      debugButton.style.borderRadius = `${TOP_UI.radius}px`;
-      debugButton.style.padding = `0 ${TOP_UI.paddingX}px`;
-      debugButton.style.height = `${TOP_UI.height}px`;
-      debugButton.style.background = TOP_UI.background;
-      debugButton.style.color = TOP_UI.color;
-      debugButton.style.font = TOP_UI.font;
-      debugButton.style.lineHeight = '1.2';
-      debugButton.style.whiteSpace = 'nowrap';
-      debugButton.style.textTransform = 'uppercase';
+      debugButton.style.display = 'none';
     }
+  }
+
+  function createPixiHud() {
+    keyHudContainer = new PIXI.Container();
+    keyCurrentSprite = new PIXI.Sprite(textures.key0Label);
+    keyCurrentSprite.anchor.set(0.5, 0.5);
+    fitSpriteByHeight(keyCurrentSprite, PIXI_HUD.keyNumberH);
+
+    keySlashSprite = new PIXI.Sprite(textures.keySlash);
+    keySlashSprite.anchor.set(0.5, 0.5);
+    fitSpriteByHeight(keySlashSprite, PIXI_HUD.keySlashH);
+
+    keyGoalSprite = new PIXI.Sprite(textures.key3Label);
+    keyGoalSprite.anchor.set(0.5, 0.5);
+    fitSpriteByHeight(keyGoalSprite, PIXI_HUD.keyNumberH);
+
+    keyCurrentSprite.position.set(-56, 0);
+    keySlashSprite.position.set(0, 0);
+    keyGoalSprite.position.set(52, 0);
+    keyHudContainer.addChild(keyCurrentSprite);
+    keyHudContainer.addChild(keySlashSprite);
+    keyHudContainer.addChild(keyGoalSprite);
+
+    moveHudContainer = new PIXI.Container();
+    moveBoardSprite = new PIXI.Sprite(textures.moveBoard);
+    moveBoardSprite.anchor.set(0.5, 0.5);
+    fitSpriteByWidth(moveBoardSprite, PIXI_HUD.moveBoardW);
+
+    moveLabelSprite = new PIXI.Sprite(textures.moveLabel);
+    moveLabelSprite.anchor.set(0.5, 0.5);
+    fitSpriteByWidth(moveLabelSprite, PIXI_HUD.moveLabelW);
+    moveLabelSprite.position.set(-66, 0);
+
+    moveDigitsContainer = new PIXI.Container();
+    moveDigitsContainer.position.set(76, 0);
+
+    moveHudContainer.addChild(moveBoardSprite);
+    moveHudContainer.addChild(moveLabelSprite);
+    moveHudContainer.addChild(moveDigitsContainer);
+
+    hudOverlay.addChild(keyHudContainer);
+    hudOverlay.addChild(moveHudContainer);
+  }
+
+  function createPopup() {
+    popupContainer = new PIXI.Container();
+    popupContainer.scale.set(0.9);
+    popupContainer.visible = false;
+    popupContainer.eventMode = 'static';
+    popupContainer.cursor = 'default';
+
+    popupBgSprite = new PIXI.Sprite(textures.popupBg);
+    popupBgSprite.anchor.set(0.5, 0.5);
+    fitSpriteByWidth(popupBgSprite, POPUP_UI.bgW);
+    popupContainer.addChild(popupBgSprite);
+
+    popupCompleteSprite = new PIXI.Sprite(textures.popupComplete);
+    popupCompleteSprite.anchor.set(0.5, 0.5);
+    fitSpriteByWidth(popupCompleteSprite, POPUP_UI.completeW);
+    popupCompleteSprite.position.set(0, -popupBgSprite.height * 0.33);
+    popupContainer.addChild(popupCompleteSprite);
+
+    popupStageSprite = new PIXI.Sprite(textures.popupStage);
+    popupStageSprite.anchor.set(0.5, 0.5);
+    fitSpriteByWidth(popupStageSprite, POPUP_UI.stageW);
+    popupStageSprite.position.set(-50, -popupBgSprite.height * 0.13);
+    popupContainer.addChild(popupStageSprite);
+
+    popupStageDigitsContainer = new PIXI.Container();
+    popupStageDigitsContainer.position.set(86, -popupBgSprite.height * 0.13);
+    popupContainer.addChild(popupStageDigitsContainer);
+
+    const starY = popupBgSprite.height * 0.03;
+    popupStarSprites = [-1, 0, 1].map((offset) => {
+      const star = new PIXI.Sprite(textures.popupStarEmpty);
+      star.anchor.set(0.5, 0.5);
+      fitSpriteByWidth(star, POPUP_UI.starW);
+      star.position.set(offset * POPUP_UI.starsGap, starY);
+      popupContainer.addChild(star);
+      return star;
+    });
+
+    popupReplayBtn = new PIXI.Sprite(textures.popupReplay);
+    popupReplayBtn.anchor.set(0.5, 0.5);
+    fitSpriteByWidth(popupReplayBtn, POPUP_UI.replayW);
+    popupReplayBtn.position.set(-104, popupBgSprite.height * 0.29);
+    popupReplayBtn.eventMode = 'static';
+    popupReplayBtn.cursor = 'pointer';
+    popupReplayBtn.on('pointertap', () => {
+      hideClear();
+      resetGameplay();
+    });
+    popupContainer.addChild(popupReplayBtn);
+
+    popupNextBtn = new PIXI.Sprite(textures.popupNext);
+    popupNextBtn.anchor.set(0.5, 0.5);
+    fitSpriteByWidth(popupNextBtn, POPUP_UI.nextW);
+    popupNextBtn.position.set(104, popupBgSprite.height * 0.29);
+    popupNextBtn.eventMode = 'static';
+    popupNextBtn.cursor = 'pointer';
+    popupNextBtn.on('pointertap', () => {
+      const nextStageId = state.stageId + 1;
+      hideClear();
+      if (nextStageId > STAGE_COUNT) {
+        onGoLobby?.();
+        return;
+      }
+      buildStage(nextStageId);
+      resetGameplay();
+      onResize();
+    });
+    popupContainer.addChild(popupNextBtn);
+
+    popupExitBtn = new PIXI.Sprite(textures.popupExit);
+    popupExitBtn.anchor.set(0.5, 0.5);
+    fitSpriteByWidth(popupExitBtn, POPUP_UI.exitW);
+    popupExitBtn.position.set(popupBgSprite.width * 0.45, -popupBgSprite.height * 0.46);
+    popupExitBtn.eventMode = 'static';
+    popupExitBtn.cursor = 'pointer';
+    popupExitBtn.on('pointertap', () => {
+      hideClear();
+      onGoLobby?.();
+    });
+    popupContainer.addChild(popupExitBtn);
+
+    hudOverlay.addChild(popupContainer);
   }
 
   function applyTopButtonStyle(button) {
@@ -308,105 +453,136 @@ export const createGameScene = ({ app, root, textures, onGoLobby }) => {
     button.style.cursor = 'pointer';
   }
 
-  function layoutHudByBoard(currentBoard, currentFrame) {
-    if (!keyHudEl || !resetButtonEl || !homeButtonEl || !backButtonEl) {
+  function layoutHudByBoard(currentBoard) {
+    if (!keyHudContainer || !moveHudContainer) {
       return;
     }
 
-    const frameScale = currentFrame.scale.x;
-    const frameX = currentFrame.x;
-    const frameY = currentFrame.y;
+    const boardTop = currentBoard.container.y;
+    const boardWidth = currentBoard.boardPixelWidth * currentBoard.container.scale.x;
+    const boardHeight = currentBoard.boardPixelHeight * currentBoard.container.scale.x;
+    const boardCenterX = currentBoard.container.x + boardWidth * 0.5;
+    const boardBottom = boardTop + boardHeight;
 
-    const boardTop = frameY + currentBoard.container.y * frameScale;
-    const boardWidth = currentBoard.boardPixelWidth * currentBoard.container.scale.x * frameScale;
-    const boardCenterX = frameX + (currentBoard.container.x * frameScale) + boardWidth * 0.5;
+    const keyY = Math.max(40, boardTop - 48);
+    keyHudContainer.position.set(boardCenterX, keyY);
 
-    const margin = 12;
-    const gap = 12;
-    const itemGap = 8;
+    const moveY = Math.min(1880, boardBottom + 52);
+    moveHudContainer.position.set(boardCenterX, moveY);
 
-    const backW = backButtonEl.offsetWidth || 78;
-    const homeW = homeButtonEl.offsetWidth || 82;
-    const keyW = keyHudEl.offsetWidth || 100;
-    const resetW = resetButtonEl.offsetWidth || 84;
-    const debugButton = debugUi?.button ?? null;
-    const debugW = debugButton?.offsetWidth || 80;
-
-    const rowH = Math.max(
-      backButtonEl.offsetHeight || TOP_UI.height,
-      homeButtonEl.offsetHeight || TOP_UI.height,
-      keyHudEl.offsetHeight || TOP_UI.height,
-      resetButtonEl.offsetHeight || TOP_UI.height,
-      debugButton?.offsetHeight || TOP_UI.height
-    );
-
-    const rowTop = Math.max(margin, boardTop - rowH - gap);
-    const rowWidth = backW + itemGap + homeW + itemGap + keyW + itemGap + resetW + itemGap + debugW;
-    let cursorX = boardCenterX - rowWidth * 0.5;
-
-    placeElement(backButtonEl, cursorX, rowTop);
-    cursorX += backW + itemGap;
-    placeElement(homeButtonEl, cursorX, rowTop);
-    cursorX += homeW + itemGap;
-    placeElement(keyHudEl, cursorX, rowTop);
-    cursorX += keyW + itemGap;
-    placeElement(resetButtonEl, cursorX, rowTop);
-    cursorX += resetW + itemGap;
-
-    if (debugButton) {
-      placeElement(debugButton, cursorX, rowTop);
-      if (debugUi?.panel) {
-        debugUi.panel.style.right = 'auto';
-        debugUi.panel.style.left = `${Math.round(cursorX)}px`;
-        debugUi.panel.style.top = `${Math.round(rowTop + rowH + 8)}px`;
-      }
+    if (popupContainer) {
+      popupContainer.position.set(boardCenterX, POPUP_UI.bgY);
     }
-
-    if (clearEl) {
-      const clearX = frameX + DESIGN_W * frameScale * 0.5;
-      const clearY = frameY + DESIGN_H * frameScale * 0.5;
-      clearEl.style.left = `${Math.round(clearX)}px`;
-      clearEl.style.top = `${Math.round(clearY)}px`;
-      clearEl.style.transform = 'translate(-50%, -50%)';
-    }
-  }
-
-  function placeElement(el, x, y) {
-    el.style.left = `${Math.round(x)}px`;
-    el.style.top = `${Math.round(y)}px`;
-    el.style.transform = 'none';
-    el.style.right = 'auto';
   }
 
   function updateHud() {
-    if (!keyHudEl) {
+    if (!keyCurrentSprite || !keyGoalSprite || !moveDigitsContainer) {
       return;
     }
-    keyHudEl.textContent = `KEY ${state.keyCollected}/${state.keyGoal}`;
+    const collected = Math.max(0, Math.min(3, state.keyCollected));
+    keyCurrentSprite.texture = textures[`key${collected}Label`] ?? textures.key0Label;
+    keyCurrentSprite.alpha = 1;
+    keyGoalSprite.texture = textures[`key${Math.max(1, Math.min(3, state.keyGoal))}Label`] ?? textures.key3Label;
+    renderMoveDigits(String(state.moveCount));
   }
 
-  function showClear() {
-    if (clearEl) {
-      clearEl.style.display = 'block';
+  function renderMoveDigits(valueText) {
+    if (!moveDigitsContainer) {
+      return;
     }
+    moveDigitsContainer.removeChildren();
+
+    const digits = valueText.split('');
+    const sprites = [];
+    let totalW = 0;
+
+    for (const ch of digits) {
+      const key = `hudNum${ch}`;
+      const tex = textures[key] ?? textures.hudNum0;
+      const spr = new PIXI.Sprite(tex);
+      spr.anchor.set(0.5, 0.5);
+      fitSpriteByHeight(spr, PIXI_HUD.moveDigitH);
+      sprites.push(spr);
+      totalW += spr.width;
+    }
+
+    if (sprites.length > 1) {
+      totalW += PIXI_HUD.moveDigitGap * (sprites.length - 1);
+    }
+
+    let x = -totalW * 0.5;
+    for (let i = 0; i < sprites.length; i += 1) {
+      const spr = sprites[i];
+      x += spr.width * 0.5;
+      spr.position.set(x, 0);
+      moveDigitsContainer.addChild(spr);
+      x += spr.width * 0.5 + PIXI_HUD.moveDigitGap;
+    }
+  }
+
+  function showClear(stars = state.stars) {
+    if (!popupContainer) {
+      return;
+    }
+    renderPopupStageNumber(state.stageId);
+    for (let i = 0; i < popupStarSprites.length; i += 1) {
+      popupStarSprites[i].texture = i < stars ? textures.popupStar : textures.popupStarEmpty;
+    }
+    popupContainer.visible = true;
   }
 
   function hideClear() {
-    if (clearEl) {
-      clearEl.style.display = 'none';
+    if (popupContainer) {
+      popupContainer.visible = false;
     }
   }
 
   function setUiVisible(visible) {
-    const display = visible ? '' : 'none';
-    if (keyHudEl) keyHudEl.style.display = visible ? 'flex' : 'none';
-    if (resetButtonEl) resetButtonEl.style.display = display;
-    if (homeButtonEl) homeButtonEl.style.display = display;
-    if (backButtonEl) backButtonEl.style.display = display;
-    if (clearEl && !visible) clearEl.style.display = 'none';
-    if (debugUi?.button) debugUi.button.style.display = display;
+    if (hudOverlay) hudOverlay.visible = visible;
+    if (resetButtonEl) resetButtonEl.style.display = 'none';
+    if (backButtonEl) backButtonEl.style.display = visible ? '' : 'none';
+    if (!visible) {
+      hideClear();
+    }
+    if (debugUi?.button) debugUi.button.style.display = 'none';
     if (debugUi?.panel && !visible) debugUi.panel.style.display = 'none';
   }
+
+  function renderPopupStageNumber(stageId) {
+    if (!popupStageDigitsContainer) {
+      return;
+    }
+    popupStageDigitsContainer.removeChildren();
+
+    const chars = String(stageId).split('');
+    const sprites = [];
+    let totalW = 0;
+
+    for (const ch of chars) {
+      const tex = textures[`popupNum${ch}`] ?? textures.popupNum0;
+      const spr = new PIXI.Sprite(tex);
+      spr.anchor.set(0.5, 0.5);
+      fitSpriteByHeight(spr, POPUP_UI.stageNumH);
+      sprites.push(spr);
+      totalW += spr.width;
+    }
+
+    if (sprites.length > 1) {
+      totalW += 8 * (sprites.length - 1);
+    }
+
+    let x = -totalW * 0.5;
+    for (let i = 0; i < sprites.length; i += 1) {
+      const spr = sprites[i];
+      x += spr.width * 0.5;
+      spr.position.set(x, 0);
+      popupStageDigitsContainer.addChild(spr);
+      x += spr.width * 0.5 + 8;
+    }
+  }
+
+  buildStage(state.stageId);
+  resetGameplay();
 
   return {
     container,
@@ -425,13 +601,50 @@ const layoutVirtualFrame = (frame, screenW, screenH) => {
   frame.y = 0;
 };
 
+const fitSpriteByWidth = (sprite, width) => {
+  const ratio = sprite.texture.height / sprite.texture.width;
+  sprite.width = width;
+  sprite.height = width * ratio;
+};
+
+const fitSpriteByHeight = (sprite, height) => {
+  const ratio = sprite.texture.width / sprite.texture.height;
+  sprite.height = height;
+  sprite.width = height * ratio;
+};
+
 const getPlayerRendererPosition = (player, board, frame) => {
+  if (!player || !board) {
+    return {
+      x: frame.x + (DESIGN_W * frame.scale.x) * 0.5,
+      y: frame.y + (DESIGN_H * frame.scale.y) * 0.5,
+    };
+  }
   const localX = board.container.x + player.sprite.x * board.container.scale.x;
   const localY = board.container.y + player.sprite.y * board.container.scale.y;
   return {
     x: frame.x + localX * frame.scale.x,
     y: frame.y + localY * frame.scale.y,
   };
+};
+
+const resolveStageId = (stageId) => {
+  const numeric = Number(stageId);
+  if (!Number.isFinite(numeric)) {
+    return 1;
+  }
+  const normalized = Math.floor(numeric);
+  return Math.max(1, Math.min(STAGE_COUNT, normalized));
+};
+
+const calculateStars = (minMoves, moveCount) => {
+  if (moveCount === minMoves) {
+    return 3;
+  }
+  if (moveCount <= minMoves + 4) {
+    return 2;
+  }
+  return 1;
 };
 
 const setupGlobalErrorCapture = () => {

@@ -45,7 +45,8 @@
       }
 
       try {
-        await import('./src/app.js');
+        const cacheBust = Date.now();
+        await import(`./src/app.js?v=${cacheBust}`);
       } catch (err) {
         console.error(err);
         if (app) {

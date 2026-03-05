@@ -136,7 +136,13 @@ export class Board {
   }
 
   canStand(x, y) {
-    return this.isInside(x, y) && !this.isWall(x, y);
+    if (!this.isInside(x, y) || this.isWall(x, y)) {
+      return false;
+    }
+    if (!this.portalActive && x === this.portalCell.x && y === this.portalCell.y) {
+      return false;
+    }
+    return true;
   }
 
   collectKeysOnPath(pathCells) {

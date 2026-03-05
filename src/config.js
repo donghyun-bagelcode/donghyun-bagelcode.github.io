@@ -23,6 +23,23 @@ export const ASSET_PATHS = {
   key: './image/ingame/key.png',
   portalOff: './image/ingame/portal_off.png',
   portalOn: './image/ingame/portal_on.png',
+  moveBoard: './image/ingame/move board.png',
+  moveLabel: './image/ingame/MOVE.png',
+  key0Label: './image/ingame/Key_0.png',
+  key1Label: './image/ingame/Key_1.png',
+  key2Label: './image/ingame/Key_2.png',
+  key3Label: './image/ingame/Key_3.png',
+  keySlash: './image/ingame/key_slash.png',
+  hudNum0: './image/common/num_0.png',
+  hudNum1: './image/common/num_1.png',
+  hudNum2: './image/common/num_2.png',
+  hudNum3: './image/common/num_3.png',
+  hudNum4: './image/common/num_4.png',
+  hudNum5: './image/common/num_5.png',
+  hudNum6: './image/common/num_6.png',
+  hudNum7: './image/common/num_7.png',
+  hudNum8: './image/common/num_8.png',
+  hudNum9: './image/common/num_9.png',
 };
 
 export const OBJECT_SCALE = {
@@ -31,17 +48,167 @@ export const OBJECT_SCALE = {
   portal: 1.36,
 };
 
-export const STAGE_LAYOUT_W1_S1 = [
-  '#######',
-  '#..P..#',
-  '#.##..#',
-  '#..k.k#',
-  '#..S..#',
-  '#....##',
-  '#.###k#',
-  '#.....#',
-  '#.....#',
-  '#######',
+export const STAGES = [
+  {
+    id: 1,
+    minMoves: 5,
+    layout: [
+      '#######',
+      '##.P###',
+      '##...##',
+      '##.k.##',
+      '##...##',
+      '##.S.##',
+      '##.k.##',
+      '##k..##',
+      '##...##',
+      '#######',
+    ],
+  },
+  {
+    id: 2,
+    minMoves: 5,
+    layout: [
+      '#######',
+      '##..P##',
+      '##.k.##',
+      '##...##',
+      '##.k###',
+      '##.S.##',
+      '##...##',
+      '##k..##',
+      '##...##',
+      '#######',
+    ],
+  },
+  {
+    id: 3,
+    minMoves: 5,
+    layout: [
+      '#######',
+      '##..P##',
+      '##k..##',
+      '##...##',
+      '##.#.##',
+      '##.S.##',
+      '##...##',
+      '##..k##',
+      '##k..##',
+      '#######',
+    ],
+  },
+  {
+    id: 4,
+    minMoves: 6,
+    layout: [
+      '#######',
+      '##P..##',
+      '##.#.##',
+      '##k..##',
+      '##...##',
+      '##.S###',
+      '##..k##',
+      '##...##',
+      '##k..##',
+      '#######',
+    ],
+  },
+  {
+    id: 5,
+    minMoves: 10,
+    layout: [
+      '#######',
+      '#kPk..#',
+      '#.....#',
+      '##...##',
+      '#....##',
+      '#k.S..#',
+      '##.#..#',
+      '#.....#',
+      '#..##.#',
+      '#######',
+    ],
+  },
+  {
+    id: 6,
+    minMoves: 10,
+    layout: [
+      '#######',
+      '#..P.k#',
+      '#...k##',
+      '#.....#',
+      '#....k#',
+      '#..S###',
+      '#....##',
+      '#.....#',
+      '#..####',
+      '#######',
+    ],
+  },
+  {
+    id: 7,
+    minMoves: 10,
+    layout: [
+      '#######',
+      '##.#P.#',
+      '##....#',
+      '#....##',
+      '#..#..#',
+      '#.kS.k#',
+      '#.k..##',
+      '#.....#',
+      '###...#',
+      '#######',
+    ],
+  },
+  {
+    id: 8,
+    minMoves: 17,
+    layout: [
+      '#######',
+      '#.#..P#',
+      '#...###',
+      '#k....#',
+      '#.....#',
+      '##.S..#',
+      '##...##',
+      '#.....#',
+      '#k##k.#',
+      '#######',
+    ],
+  },
+  {
+    id: 9,
+    minMoves: 16,
+    layout: [
+      '#######',
+      '#P.##.#',
+      '##...k#',
+      '#..#..#',
+      '#k....#',
+      '##.S.##',
+      '#..#.##',
+      '#....k#',
+      '##..#.#',
+      '#######',
+    ],
+  },
+  {
+    id: 10,
+    minMoves: 7,
+    layout: [
+      '#######',
+      '##P..##',
+      '##.#..#',
+      '#k...k#',
+      '##.k.##',
+      '#..S..#',
+      '#....##',
+      '###...#',
+      '#.#...#',
+      '#######',
+    ],
+  },
 ];
 
 const parseStageLayout = (rows) => {
@@ -95,10 +262,15 @@ const parseStageLayout = (rows) => {
   return { walls, keys, start, portal };
 };
 
-const stage = parseStageLayout(STAGE_LAYOUT_W1_S1);
-export const MAP_WALLS = stage.walls;
-export const KEY_CELLS = stage.keys;
-export const PLAYER_START = stage.start;
-export const PORTAL_CELL = stage.portal;
+export const getStage = (stageId) => {
+  const stage = STAGES.find((item) => item.id === stageId);
+  if (!stage) {
+    throw new Error(`스테이지 ${stageId}를 찾지 못했습니다.`);
+  }
+  const parsed = parseStageLayout(stage.layout);
+  return { ...parsed, minMoves: stage.minMoves };
+};
+
+export const STAGE_COUNT = STAGES.length;
 
 export const SWIPE_MIN_DISTANCE = 28;
