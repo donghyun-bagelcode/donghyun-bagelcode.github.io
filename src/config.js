@@ -20,6 +20,10 @@ export const ASSET_PATHS = {
   tile: './image/ingame/tile.png',
   wall: './image/ingame/block.png',
   characterSheet: './image/ingame/character-knight.png',
+  charSheetKnight: './image/charactor/character-knight.png',
+  charSheetArcher: './image/charactor/character-archer.png',
+  charSheetMagician: './image/charactor/character-magician.png',
+  charSheetThief: './image/charactor/character-thief.png',
   key: './image/ingame/key.png',
   portalOff: './image/ingame/portal_off.png',
   portalOn: './image/ingame/portal_on.png',
@@ -211,6 +215,25 @@ export const STAGES = [
   },
 ];
 
+const HARD_MIN_MOVES_BY_ID = {
+  1: 16,
+  2: 21,
+  3: 16,
+  4: 14,
+  5: 7,
+  6: 16,
+  7: 12,
+  8: 10,
+  9: 11,
+  10: 17,
+};
+
+export const STAGES_HARD = STAGES.map((stage) => ({
+  id: stage.id,
+  minMoves: HARD_MIN_MOVES_BY_ID[stage.id] ?? stage.minMoves,
+  layout: [...stage.layout],
+}));
+
 const parseStageLayout = (rows) => {
   if (rows.length !== GRID_ROWS) {
     throw new Error(`스테이지 행 수가 GRID_ROWS(${GRID_ROWS})와 다릅니다.`);
@@ -262,15 +285,17 @@ const parseStageLayout = (rows) => {
   return { walls, keys, start, portal };
 };
 
-export const getStage = (stageId) => {
-  const stage = STAGES.find((item) => item.id === stageId);
+export const getStage = (stageId, mode = 'basic') => {
+  const source = mode === 'hard' ? STAGES_HARD : STAGES;
+  const stage = source.find((item) => item.id === stageId);
   if (!stage) {
-    throw new Error(`스테이지 ${stageId}를 찾지 못했습니다.`);
+    throw new Error(`스테이지 ${stageId}를 찾지 못했습니다. mode=${mode}`);
   }
   const parsed = parseStageLayout(stage.layout);
   return { ...parsed, minMoves: stage.minMoves };
 };
 
 export const STAGE_COUNT = STAGES.length;
+export const STAGE_COUNT_HARD = STAGES_HARD.length;
 
 export const SWIPE_MIN_DISTANCE = 28;

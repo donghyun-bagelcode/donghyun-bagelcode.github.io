@@ -13,7 +13,7 @@ const WALK_CYCLE_COUNT = 2;
 const DIRECTION_ROWS = ['down', 'right', 'left', 'up'];
 
 export class Player {
-  constructor(board, startCell, textures) {
+  constructor(board, startCell, textures, characterSheet) {
     this.board = board;
     this.PIXI = getPixi();
     if (!this.PIXI) {
@@ -30,7 +30,7 @@ export class Player {
     this.elapsedMs = 0;
     this.animationProgress = 0;
     this.facing = 'down';
-    this.frames = this.buildAnimationFrames(this.textures.characterSheet);
+    this.frames = this.buildAnimationFrames(characterSheet ?? this.textures.characterSheet);
 
     this.sprite = new this.PIXI.Sprite(this.frames.down[0]);
     this.sprite.anchor.set(0.5, 1);

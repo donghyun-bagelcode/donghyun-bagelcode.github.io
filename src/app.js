@@ -32,6 +32,11 @@ const LOBBY_ASSET_PATHS = {
   lobbyCharacter: './image/lobby/character.png',
 };
 
+const LOBBY_HARD_ASSET_PATHS = {
+  lobbyHardBg: './image/lobby-hard/BG_hardmode.png',
+  lobbyHardTitle: './image/lobby-hard/txt_world 1 hard.png',
+};
+
 const WORLD_ASSET_PATHS = {
   worldBg: './image/world/World-select_BG.png',
   worldTitle: './image/world/World select.png',
@@ -74,6 +79,20 @@ const POPUP_ASSET_PATHS = {
   popupNum9: './image/popup/num_9.png',
 };
 
+const CHARACTER_POPUP_ASSET_PATHS = {
+  charPopBg: './image/lobby-popup/BG_pop.png',
+  charPopTitle: './image/lobby-popup/Choose your character.png',
+  charPopClose: './image/lobby-popup/Btn-X.png',
+  charPopOk: './image/lobby-popup/btn_ok.png',
+  charPopSlotRed: './image/lobby-popup/character select_red.png',
+  charPopSlotYellow: './image/lobby-popup/character select_yellow.png',
+  charPopStar: './image/lobby-popup/character rank_star.png',
+  charPopKnight: './image/lobby-popup/knight.png',
+  charPopArcher: './image/lobby-popup/archer.png',
+  charPopMagician: './image/lobby-popup/magician.png',
+  charPopThief: './image/lobby-popup/thief.png',
+};
+
 const bootstrap = async () => {
   const root = document.getElementById('app');
   if (!root) {
@@ -86,12 +105,15 @@ const bootstrap = async () => {
   const textures = await loadTextures({
     ...ASSET_PATHS,
     ...LOBBY_ASSET_PATHS,
+    ...LOBBY_HARD_ASSET_PATHS,
     ...WORLD_ASSET_PATHS,
     ...SPLASH_ASSET_PATHS,
     ...POPUP_ASSET_PATHS,
+    ...CHARACTER_POPUP_ASSET_PATHS,
   });
 
   const sceneManager = new SceneManager(app.stage);
+  let selectedCharacterId = 'knight';
 
   const splashScene = createSplashScene({
     app,
@@ -109,23 +131,40 @@ const bootstrap = async () => {
     app,
     root,
     textures,
+    getCharacterSheet: () => {
+      const sheetMap = {
+        knight: textures.charSheetKnight,
+        archer: textures.charSheetArcher,
+        magician: textures.charSheetMagician,
+        thief: textures.charSheetThief,
+      };
+      return sheetMap[selectedCharacterId] ?? textures.charSheetKnight;
+    },
     onGoLobby: () => sceneManager.switchScene('lobby'),
-    onStageClear: (stageId, stars) => {
-      saveStageResult(stageId, stars);
+    onStageClear: (stageId, stars, mode) => {
+      saveStageResult(stageId, stars, mode ?? 'basic');
     },
   });
 
   const lobbyScene = createLobbyScene({
     app,
     textures,
-    getProgress: () => ({
-      progress: loadProgress(),
-      unlockedStageId: getUnlockedStageId(),
-      totalStars: getTotalStars(),
-    }),
+    getProgress: (mode) => {
+      const targetMode = mode ?? 'basic';
+      const progressByMode = loadProgress();
+      return {
+        progress: { stages: progressByMode[targetMode] ?? {} },
+        unlockedStageId: getUnlockedStageId(targetMode),
+        totalStars: getTotalStars(targetMode),
+      };
+    },
+    onCharacterSelect: (id) => {
+      selectedCharacterId = id;
+    },
+    getSelectedCharacter: () => selectedCharacterId,
     onGoWorld: () => sceneManager.switchScene('world'),
-    onSelectStage: (stageId) => {
-      sceneManager.switchScene('game', { stageId });
+    onSelectStage: (stageId, mode) => {
+      sceneManager.switchScene('game', { stageId, mode: mode ?? 'basic' });
     },
   });
 

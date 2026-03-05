@@ -9,8 +9,9 @@ const BAR_POS = { x: 540, y: 1780 };
 const BAR_W = 700;
 
 const DOT_INTERVAL_MS = 400;
-const GAGE_INTERVAL_MS = 1000;
-const COMPLETE_DELAY_MS = 1000;
+const LOADING_SLOT_COUNT = 5;
+const LOADING_FILL_INTERVAL_MS = 100;
+const LOADING_POST_FILL_DELAY_MS = 100;
 const TITLE_FLOAT_AMPLITUDE = 8;
 const TITLE_FLOAT_PERIOD_MS = 1800;
 
@@ -56,7 +57,7 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
   frame.addChild(gageContainer);
 
   const innerWidth = loadingBar.width * (1 - BAR_INNER_PADDING_RATIO * 2);
-  const slotCount = 5;
+  const slotCount = LOADING_SLOT_COUNT;
   const gageGap = GAGE_GAP;
   const gageWBase = (innerWidth - gageGap * (slotCount - 1)) / slotCount;
   const gageW = gageWBase * GAGE_WIDTH_SCALE;
@@ -167,14 +168,14 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
       updateDots();
     }
 
-    while (state.gageElapsedMs >= GAGE_INTERVAL_MS && !state.completed) {
-      state.gageElapsedMs -= GAGE_INTERVAL_MS;
+    while (state.gageElapsedMs >= LOADING_FILL_INTERVAL_MS && !state.completed) {
+      state.gageElapsedMs -= LOADING_FILL_INTERVAL_MS;
       fillNextGage();
     }
 
     if (state.waitingComplete && !state.completed) {
       state.completeElapsedMs += app.ticker.deltaMS;
-      if (state.completeElapsedMs >= COMPLETE_DELAY_MS) {
+      if (state.completeElapsedMs >= LOADING_POST_FILL_DELAY_MS) {
         state.completed = true;
         state.waitingComplete = false;
         onComplete?.();

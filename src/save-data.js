@@ -1,12 +1,15 @@
-import { STAGE_COUNT } from './config.js';
+import { STAGE_COUNT, STAGE_COUNT_HARD } from './config.js';
 
 const SAVE_KEY = 'keyroute-save';
 
-const createDefaultProgress = () => ({ stages: {} });
+const createDefaultProgress = () => ({ basic: {}, hard: {} });
 
 const clampStars = (stars) => Math.max(0, Math.min(3, Math.floor(Number(stars) || 0)));
 
-const normalizeStageId = (stageId) => Math.max(1, Math.min(STAGE_COUNT, Math.floor(Number(stageId) || 1)));
+const getStageCountByMode = (mode) => (mode === 'hard' ? STAGE_COUNT_HARD : STAGE_COUNT);
+const normalizeMode = (mode) => (mode === 'hard' ? 'hard' : 'basic');
+const normalizeStageId = (stageId, mode = 'basic') =>
+  Math.max(1, Math.min(getStageCountByMode(mode), Math.floor(Number(stageId) || 1)));
 
 const saveProgress = (progress) => {
   try {
@@ -28,56 +31,69 @@ export const loadProgress = () => {
       return createDefaultProgress();
     }
 
-    const stages = parsed.stages;
-    if (!stages || typeof stages !== 'object') {
-      return createDefaultProgress();
+    const migrated = { ...parsed };
+    if (migrated.stages && typeof migrated.stages === 'object' && (!migrated.basic || typeof migrated.basic !== 'object')) {
+      migrated.basic = migrated.stages;
     }
 
-    const normalizedStages = {};
+    const basicSource = migrated.basic && typeof migrated.basic === 'object' ? migrated.basic : {};
+    const hardSource = migrated.hard && typeof migrated.hard === 'object' ? migrated.hard : {};
+
+    const normalizedBasic = {};
     for (let id = 1; id <= STAGE_COUNT; id += 1) {
       const key = String(id);
-      if (stages[key] == null) {
-        continue;
-      }
-      normalizedStages[key] = clampStars(stages[key]);
+      if (basicSource[key] == null) continue;
+      normalizedBasic[key] = clampStars(basicSource[key]);
     }
 
-    return { stages: normalizedStages };
+    const normalizedHard = {};
+    for (let id = 1; id <= STAGE_COUNT_HARD; id += 1) {
+      const key = String(id);
+      if (hardSource[key] == null) continue;
+      normalizedHard[key] = clampStars(hardSource[key]);
+    }
+
+    return { basic: normalizedBasic, hard: normalizedHard };
   } catch {
     return createDefaultProgress();
   }
 };
 
-export const saveStageResult = (stageId, stars) => {
+export const saveStageResult = (stageId, stars, mode = 'basic') => {
   const progress = loadProgress();
-  const normalizedId = String(normalizeStageId(stageId));
+  const targetMode = normalizeMode(mode);
+  const normalizedId = String(normalizeStageId(stageId, targetMode));
   const nextStars = clampStars(stars);
-  const prevStars = clampStars(progress.stages[normalizedId]);
+  const prevStars = clampStars(progress[targetMode][normalizedId]);
 
   if (nextStars > prevStars) {
-    progress.stages[normalizedId] = nextStars;
+    progress[targetMode][normalizedId] = nextStars;
     saveProgress(progress);
   }
 
   return progress;
 };
 
-export const getUnlockedStageId = () => {
+export const getUnlockedStageId = (mode = 'basic') => {
+  const targetMode = normalizeMode(mode);
+  const maxStage = getStageCountByMode(targetMode);
   const progress = loadProgress();
-  for (let id = 1; id <= STAGE_COUNT; id += 1) {
-    const stars = clampStars(progress.stages[String(id)]);
+  for (let id = 1; id <= maxStage; id += 1) {
+    const stars = clampStars(progress[targetMode][String(id)]);
     if (stars <= 0) {
       return id;
     }
   }
-  return STAGE_COUNT;
+  return maxStage;
 };
 
-export const getTotalStars = () => {
+export const getTotalStars = (mode = 'basic') => {
+  const targetMode = normalizeMode(mode);
+  const maxStage = getStageCountByMode(targetMode);
   const progress = loadProgress();
   let total = 0;
-  for (let id = 1; id <= STAGE_COUNT; id += 1) {
-    total += clampStars(progress.stages[String(id)]);
+  for (let id = 1; id <= maxStage; id += 1) {
+    total += clampStars(progress[targetMode][String(id)]);
   }
   return total;
 };

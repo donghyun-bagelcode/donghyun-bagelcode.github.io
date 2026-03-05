@@ -41,7 +41,7 @@ const POPUP_UI = {
   exitW: 86,
 };
 
-export const createGameScene = ({ app, root, textures, onGoLobby, onStageClear }) => {
+export const createGameScene = ({ app, root, textures, onGoLobby, onStageClear, getCharacterSheet }) => {
   const PIXI = getPixi();
   if (!PIXI) {
     throw new Error('PixiJS 인스턴스를 찾지 못했습니다.');
@@ -64,6 +64,7 @@ export const createGameScene = ({ app, root, textures, onGoLobby, onStageClear }
   let board = null;
   let player = null;
   let currentStage = null;
+  let currentCharacterSheet = null;
 
   const state = {
     keyCollected: 0,
@@ -74,6 +75,7 @@ export const createGameScene = ({ app, root, textures, onGoLobby, onStageClear }
     portalActive: false,
     active: false,
     stageId: 1,
+    mode: 'basic',
   };
 
   let keyHudContainer = null;
@@ -185,8 +187,14 @@ export const createGameScene = ({ app, root, textures, onGoLobby, onStageClear }
   const onEnter = (ctx = {}) => {
     const payload = ctx.payload ?? ctx;
     state.active = true;
+    const nextMode = payload.mode ?? 'basic';
     const nextStageId = resolveStageId(payload.stageId ?? state.stageId);
-    if (!board || nextStageId !== state.stageId) {
+    const modeChanged = state.mode !== nextMode;
+    state.mode = nextMode;
+    const nextCharacterSheet = getCharacterSheet?.() ?? textures.characterSheet;
+    const shouldRebuild =
+      !board || nextStageId !== state.stageId || currentCharacterSheet !== nextCharacterSheet || modeChanged;
+    if (shouldRebuild) {
       buildStage(nextStageId);
     }
     resetGameplay();
@@ -234,8 +242,8 @@ export const createGameScene = ({ app, root, textures, onGoLobby, onStageClear }
 
     if (state.portalActive && board.isPortalOnPath(path)) {
       state.clear = true;
-      state.stars = calculateStars(currentStage.minMoves, state.moveCount);
-      onStageClear?.(state.stageId, state.stars);
+      state.stars = calculateStars(currentStage.minMoves, state.moveCount, state.mode);
+      onStageClear?.(state.stageId, state.stars, state.mode);
       showClear(state.stars);
     }
 
@@ -265,16 +273,18 @@ export const createGameScene = ({ app, root, textures, onGoLobby, onStageClear }
 
   const buildStage = (stageId) => {
     const nextStageId = resolveStageId(stageId);
-    const stageData = getStage(nextStageId);
+    const stageData = getStage(nextStageId, state.mode);
+    const characterSheet = getCharacterSheet?.() ?? textures.characterSheet;
 
     if (board) {
       frame.removeChild(board.container);
     }
 
     board = new Board(frame, stageData.walls, stageData.keys, stageData.portal, textures);
-    player = new Player(board, stageData.start, textures);
+    player = new Player(board, stageData.start, textures, characterSheet);
     frame.addChild(hudOverlay);
     currentStage = stageData;
+    currentCharacterSheet = characterSheet;
     state.stageId = nextStageId;
     state.keyGoal = stageData.keys.length;
     pendingSlideOutcome = null;
@@ -637,11 +647,12 @@ const resolveStageId = (stageId) => {
   return Math.max(1, Math.min(STAGE_COUNT, normalized));
 };
 
-const calculateStars = (minMoves, moveCount) => {
+const calculateStars = (minMoves, moveCount, mode = 'basic') => {
   if (moveCount === minMoves) {
     return 3;
   }
-  if (moveCount <= minMoves + 4) {
+  const threshold = mode === 'hard' ? 2 : 4;
+  if (moveCount <= minMoves + threshold) {
     return 2;
   }
   return 1;
