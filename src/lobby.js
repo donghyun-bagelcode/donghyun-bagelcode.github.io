@@ -24,7 +24,7 @@ const UI_POS = {
   starBar: { x: 540, y: 307 },
   back: { x: 65, y: 115 },
   home: { x: 151, y: 115 },
-  page: { x: 994, y: 1786 },
+  page: { x: 994, y: 960 },
 };
 
 const STAR_COUNTER_UI = {
@@ -42,10 +42,23 @@ const STAGE_BUTTON_W = 184;
 const STAGE_BUTTON_W_SMALL = 168;
 const STAGE_NUMBER_W = 62;
 const STAGE_NUMBER_H = 62;
+const STAGE_NUMBER_10_H = 72;
+const STAGE_NUMBER_10_GAP = 0.52;
 const STAGE_NUMBER_Y_OFFSET = -18;
+const STAGE_STAR_W = 52;
+const STAGE_STAR_GAP = 40;
+const STAGE_STAR_Y_OFFSET = -80;
 const TOP_BACK_ICON_W = 66;
 const TOP_HOME_ICON_W = 80;
 const PAGE_BUTTON_W = 108;
+const PAGE_BACK_POS = { x: 86, y: 960 };
+const COMING_SOON_W = DESIGN_W;
+const PROFILE_ICON_POS = { x: 980, y: 115 };
+const PROFILE_ICON_RADIUS = 120;
+const PROFILE_FRAME_W = PROFILE_ICON_RADIUS * 2 + 16;
+const PROFILE_PORTRAIT_W = PROFILE_ICON_RADIUS * 2 - 16;
+const PROFILE_BADGE_W = 56;
+const PROFILE_BADGE_OFFSET = { x: -80, y: 60 };
 const SELECT_CHARACTER_H = 220;
 const SELECT_CHARACTER_X_OFFSET = -10;
 const SELECT_CHARACTER_STAND_OFFSET_Y = 0;
@@ -53,23 +66,42 @@ const CHARACTER_POPUP_UI = {
   bgW: 900,
   centerX: 540,
   centerY: 960,
+  popupScaleX: 1,
+  popupScaleY: 1,
   titleW: 420,
+  titleX: 0,
+  titleY: -472,
+  titleScaleX: 1,
+  titleScaleY: 1,
   closeW: 52,
+  closeX: 378,
+  closeY: -524,
+  closeScaleX: 1,
+  closeScaleY: 1,
   okW: 220,
-  slotW: 170,
-  slotGapX: 28,
-  slotGapY: 32,
-  gridTopY: -130,
-  starsW: 20,
-  starsGap: 22,
-  portraitScale: 0.82,
+  okX: 0,
+  okY: 485,
+  okScaleX: 1,
+  okScaleY: 1,
+  slotW: 220,
+  slotGapX: 16,
+  slotGapY: 40,
+  gridTopY: -300,
+  starsW: 26,
+  starsGap: 28,
+  portraitScale: 0.85,
 };
 const CHARACTER_GRID_SLOT_TOTAL = 9;
 const CHARACTER_LIST = [
-  { id: 'knight', textureKey: 'charPopKnight' },
-  { id: 'thief', textureKey: 'charPopThief' },
-  { id: 'archer', textureKey: 'charPopArcher' },
-  { id: 'magician', textureKey: 'charPopMagician' },
+  { id: 'knight', textureKey: 'charPopKnight', locked: false },
+  { id: 'thief', textureKey: 'charPopThief', locked: false },
+  { id: 'archer', textureKey: 'charPopArcher', locked: false },
+  { id: 'magician', textureKey: 'charPopMagician', locked: false },
+  { id: 'locked1', textureKey: 'charPopLocked1', locked: true },
+  { id: 'locked2', textureKey: 'charPopLocked2', locked: true },
+  { id: 'locked3', textureKey: 'charPopLocked3', locked: true },
+  { id: 'locked4', textureKey: 'charPopLocked4', locked: true },
+  { id: 'locked5', textureKey: 'charPopLocked5', locked: true },
 ];
 const CHARACTER_TEXTURE_BY_ID = {
   knight: 'charPopKnight',
@@ -95,6 +127,7 @@ export const createLobbyScene = ({
   const container = new PIXI.Container();
   container.visible = false;
   let currentMode = 'basic';
+  let currentPage = 1;
 
   const frame = new PIXI.Container();
   container.addChild(frame);
@@ -141,6 +174,19 @@ export const createLobbyScene = ({
   topHome.cursor = 'pointer';
   frame.addChild(topHome);
 
+  const page1Container = new PIXI.Container();
+  frame.addChild(page1Container);
+
+  const page2Container = new PIXI.Container();
+  page2Container.visible = false;
+  frame.addChild(page2Container);
+
+  const comingSoon = new PIXI.Sprite(textures.lobbyComingSoon);
+  comingSoon.anchor.set(0.5, 0.5);
+  fitByWidth(comingSoon, COMING_SOON_W);
+  comingSoon.position.set(540, 960);
+  page2Container.addChild(comingSoon);
+
   const pageButton = new PIXI.Sprite(textures.pageButton);
   pageButton.anchor.set(0.5, 0.5);
   fitByWidth(pageButton, PAGE_BUTTON_W);
@@ -149,34 +195,79 @@ export const createLobbyScene = ({
   pageButton.cursor = 'pointer';
   frame.addChild(pageButton);
 
+  const pageBackButton = new PIXI.Sprite(textures.pageButton);
+  pageBackButton.anchor.set(0.5, 0.5);
+  fitByWidth(pageBackButton, PAGE_BUTTON_W);
+  pageBackButton.scale.x *= -1;
+  pageBackButton.position.set(PAGE_BACK_POS.x, PAGE_BACK_POS.y);
+  pageBackButton.eventMode = 'static';
+  pageBackButton.cursor = 'pointer';
+  pageBackButton.visible = false;
+  frame.addChild(pageBackButton);
+
   const stageNodes = STAGE_META.map((meta) =>
     createStageNode(PIXI, textures, meta.id, (stageId) => onSelectStage?.(stageId, currentMode))
   );
+
   for (const node of stageNodes) {
     const p = STAGE_POS[node.id];
 
     node.button.position.set(p.x, p.y);
-    frame.addChild(node.button);
-    frame.addChild(node.starContainer);
+    page1Container.addChild(node.button);
 
     if (node.numberSprite) {
       if (node.numberSprite.texture) {
         fitByWidth(node.numberSprite, STAGE_NUMBER_W);
       }
       node.numberSprite.position.set(p.x, p.y + STAGE_NUMBER_Y_OFFSET);
-      frame.addChild(node.numberSprite);
+      page1Container.addChild(node.numberSprite);
     }
 
     if (node.numberText) {
       node.numberText.position.set(p.x, p.y + STAGE_NUMBER_Y_OFFSET);
-      frame.addChild(node.numberText);
+      page1Container.addChild(node.numberText);
     }
   }
 
+  for (const node of stageNodes) {
+    page1Container.addChild(node.starContainer);
+  }
+
   const characterBadge = createPlayableCharacterBadge(PIXI, textures);
-  characterBadge.eventMode = 'static';
-  characterBadge.cursor = 'pointer';
-  frame.addChild(characterBadge);
+  characterBadge.eventMode = 'none';
+  characterBadge.cursor = 'default';
+  page1Container.addChild(characterBadge);
+
+  const profileIconContainer = new PIXI.Container();
+  profileIconContainer.position.set(PROFILE_ICON_POS.x, PROFILE_ICON_POS.y);
+  frame.addChild(profileIconContainer);
+
+  const profileFrame = new PIXI.Sprite(textures.profileFrame1);
+  profileFrame.anchor.set(0.5, 0.5);
+  fitByWidth(profileFrame, PROFILE_FRAME_W);
+  profileIconContainer.addChild(profileFrame);
+
+  const profileMask = new PIXI.Graphics();
+  profileMask.beginFill(0xffffff);
+  profileMask.drawCircle(0, 0, PROFILE_ICON_RADIUS);
+  profileMask.endFill();
+  profileIconContainer.addChild(profileMask);
+
+  const profilePortrait = new PIXI.Sprite(textures.charPopKnight);
+  profilePortrait.anchor.set(0.5, 0.25);
+  fitByWidth(profilePortrait, PROFILE_PORTRAIT_W);
+  profilePortrait.mask = profileMask;
+  profileIconContainer.addChild(profilePortrait);
+
+  const profileBadge = new PIXI.Sprite(textures.profileFrame2);
+  profileBadge.anchor.set(0.5, 0.5);
+  fitByWidth(profileBadge, PROFILE_BADGE_W);
+  profileBadge.position.set(PROFILE_BADGE_OFFSET.x, PROFILE_BADGE_OFFSET.y);
+  profileIconContainer.addChild(profileBadge);
+
+  profileIconContainer.eventMode = 'static';
+  profileIconContainer.hitArea = new PIXI.Circle(0, 0, PROFILE_ICON_RADIUS + 10);
+  profileIconContainer.cursor = 'pointer';
 
   let selectedCharacterId = normalizeCharacterId(getSelectedCharacter?.());
   let pendingCharacterId = selectedCharacterId;
@@ -199,6 +290,7 @@ export const createLobbyScene = ({
 
   const charPopupRoot = new PIXI.Container();
   charPopupRoot.position.set(CHARACTER_POPUP_UI.centerX, CHARACTER_POPUP_UI.centerY);
+  charPopupRoot.scale.set(CHARACTER_POPUP_UI.popupScaleX, CHARACTER_POPUP_UI.popupScaleY);
   charPopupContainer.addChild(charPopupRoot);
 
   const charPopupBg = new PIXI.Sprite(textures.charPopBg);
@@ -209,13 +301,21 @@ export const createLobbyScene = ({
   const charPopupTitle = new PIXI.Sprite(textures.charPopTitle);
   charPopupTitle.anchor.set(0.5, 0.5);
   fitByWidth(charPopupTitle, CHARACTER_POPUP_UI.titleW);
-  charPopupTitle.position.set(0, -charPopupBg.height * 0.37);
+  charPopupTitle.position.set(CHARACTER_POPUP_UI.titleX, CHARACTER_POPUP_UI.titleY);
+  charPopupTitle.scale.set(
+    charPopupTitle.scale.x * CHARACTER_POPUP_UI.titleScaleX,
+    charPopupTitle.scale.y * CHARACTER_POPUP_UI.titleScaleY
+  );
   charPopupRoot.addChild(charPopupTitle);
 
   const charPopupClose = new PIXI.Sprite(textures.charPopClose);
   charPopupClose.anchor.set(0.5, 0.5);
   fitByWidth(charPopupClose, CHARACTER_POPUP_UI.closeW);
-  charPopupClose.position.set(charPopupBg.width * 0.42, -charPopupBg.height * 0.41);
+  charPopupClose.position.set(CHARACTER_POPUP_UI.closeX, CHARACTER_POPUP_UI.closeY);
+  charPopupClose.scale.set(
+    charPopupClose.scale.x * CHARACTER_POPUP_UI.closeScaleX,
+    charPopupClose.scale.y * CHARACTER_POPUP_UI.closeScaleY
+  );
   charPopupClose.eventMode = 'static';
   charPopupClose.cursor = 'pointer';
   charPopupRoot.addChild(charPopupClose);
@@ -240,7 +340,11 @@ export const createLobbyScene = ({
   const charPopupOk = new PIXI.Sprite(textures.charPopOk);
   charPopupOk.anchor.set(0.5, 0.5);
   fitByWidth(charPopupOk, CHARACTER_POPUP_UI.okW);
-  charPopupOk.position.set(0, charPopupBg.height * 0.38);
+  charPopupOk.position.set(CHARACTER_POPUP_UI.okX, CHARACTER_POPUP_UI.okY);
+  charPopupOk.scale.set(
+    charPopupOk.scale.x * CHARACTER_POPUP_UI.okScaleX,
+    charPopupOk.scale.y * CHARACTER_POPUP_UI.okScaleY
+  );
   charPopupOk.eventMode = 'static';
   charPopupOk.cursor = 'pointer';
   charPopupRoot.addChild(charPopupOk);
@@ -259,6 +363,9 @@ export const createLobbyScene = ({
     const texture = textures[textureKey] ?? textures.lobbyCharacter;
     characterBadge.texture = texture;
     fitByHeight(characterBadge, SELECT_CHARACTER_H);
+    profilePortrait.texture = textures[textureKey] ?? textures.charPopKnight;
+    profilePortrait.anchor.set(0.5, 0.25);
+    fitByWidth(profilePortrait, PROFILE_PORTRAIT_W);
   };
 
   const openCharacterPopup = () => {
@@ -271,7 +378,7 @@ export const createLobbyScene = ({
     charPopupContainer.visible = false;
   };
 
-  characterBadge.on('pointertap', () => {
+  profileIconContainer.on('pointertap', () => {
     openCharacterPopup();
   });
 
@@ -352,6 +459,23 @@ export const createLobbyScene = ({
     applyMode();
   });
 
+  const applyPage = () => {
+    page1Container.visible = currentPage === 1;
+    page2Container.visible = currentPage === 2;
+    pageButton.visible = currentPage === 1;
+    pageBackButton.visible = currentPage === 2;
+  };
+
+  pageButton.on('pointertap', () => {
+    currentPage = 2;
+    applyPage();
+  });
+
+  pageBackButton.on('pointertap', () => {
+    currentPage = 1;
+    applyPage();
+  });
+
   const onResize = () => {
     layoutVirtualFrame(frame, app.renderer.width, app.renderer.height);
   };
@@ -359,6 +483,8 @@ export const createLobbyScene = ({
   return {
     container,
     onEnter: () => {
+      currentPage = 1;
+      applyPage();
       applyMode();
       onResize();
     },
@@ -388,14 +514,14 @@ const createStageNode = (PIXI, textures, stageId, onSelectStage) => {
   } else if (stageId === 10 && textures.num1 && textures.num0) {
     const one = new PIXI.Sprite(textures.num1);
     one.anchor.set(0.5, 0.5);
-    fitByHeight(one, STAGE_NUMBER_H);
+    fitByHeight(one, STAGE_NUMBER_10_H);
 
     const zero = new PIXI.Sprite(textures.num0);
     zero.anchor.set(0.5, 0.5);
-    fitByHeight(zero, STAGE_NUMBER_H);
+    fitByHeight(zero, STAGE_NUMBER_10_H);
 
     const pair = new PIXI.Container();
-    const gap = Math.round(STAGE_NUMBER_H * 0.52);
+    const gap = Math.round(STAGE_NUMBER_10_H * STAGE_NUMBER_10_GAP);
     one.position.set(-gap * 0.5, 0);
     zero.position.set(gap * 0.5, 0);
     pair.addChild(one);
@@ -441,16 +567,14 @@ const renderStageStars = (node, textures, stars) => {
     return;
   }
 
-  const starW = 36;
-  const gap = 34;
   const p = STAGE_POS[node.id];
-  node.starContainer.position.set(p.x, p.y - node.button.height * 0.58);
+  node.starContainer.position.set(p.x, p.y + STAGE_STAR_Y_OFFSET);
 
   for (let i = 0; i < stars; i += 1) {
     const star = new node.button.constructor(textures.star);
     star.anchor.set(0.5, 0.5);
-    fitByWidth(star, starW);
-    star.position.set((i - (stars - 1) * 0.5) * gap, 0);
+    fitByWidth(star, STAGE_STAR_W);
+    star.position.set((i - (stars - 1) * 0.5) * STAGE_STAR_GAP, 0);
     node.starContainer.addChild(star);
   }
 };
@@ -470,15 +594,23 @@ const pickStageTexture = (textures, status) => {
 
 const createCharacterSlot = (PIXI, textures, character) => {
   const container = new PIXI.Container();
+
+  if (!character) {
+    return { container, frame: null, characterId: null };
+  }
+
+  if (character.locked) {
+    const lockedSprite = new PIXI.Sprite(textures[character.textureKey]);
+    lockedSprite.anchor.set(0.5, 0.5);
+    fitByWidth(lockedSprite, CHARACTER_POPUP_UI.slotW);
+    container.addChild(lockedSprite);
+    return { container, frame: lockedSprite, characterId: null };
+  }
+
   const frame = new PIXI.Sprite(textures.charPopSlotYellow);
   frame.anchor.set(0.5, 0.5);
   fitByWidth(frame, CHARACTER_POPUP_UI.slotW);
   container.addChild(frame);
-
-  if (!character) {
-    frame.alpha = 0.4;
-    return { container, frame, characterId: null };
-  }
 
   const portrait = new PIXI.Sprite(textures[character.textureKey]);
   portrait.anchor.set(0.5, 0.5);

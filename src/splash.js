@@ -21,6 +21,10 @@ const GAGE_GAP = 6;
 const GAGE_OFFSET_Y = 12;
 const GAGE_WIDTH_SCALE = 1.1;
 const LOADING_CENTER_OFFSET_Y = 15;
+const TOUCH_TO_START_W = 400;
+const TOUCH_BLINK_PERIOD_MS = 1000;
+const TOUCH_BLINK_MIN_ALPHA = 0.5;
+const TOUCH_BLINK_MAX_ALPHA = 1.0;
 
 export const createSplashScene = ({ app, textures, onComplete }) => {
   const PIXI = getPixi();
@@ -32,6 +36,8 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
   container.visible = false;
 
   const frame = new PIXI.Container();
+  frame.eventMode = 'static';
+  frame.hitArea = new PIXI.Rectangle(0, 0, DESIGN_W, DESIGN_H);
   container.addChild(frame);
 
   const bg = new PIXI.Sprite(textures.splashBg);
@@ -97,6 +103,13 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
     return dot;
   });
 
+  const touchToStart = new PIXI.Sprite(textures.splashTouchToStart);
+  touchToStart.anchor.set(0.5, 0.5);
+  fitByWidth(touchToStart, TOUCH_TO_START_W);
+  touchToStart.position.set(BAR_POS.x, BAR_POS.y);
+  touchToStart.visible = false;
+  frame.addChild(touchToStart);
+
   const state = {
     dotElapsedMs: 0,
     gageElapsedMs: 0,
@@ -106,8 +119,19 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
     filledCount: 0,
     active: false,
     waitingComplete: false,
+    waitingTouch: false,
     completed: false,
+    touchBlinkElapsedMs: 0,
     tickerAttached: false,
+  };
+
+  const setLoadingVisualVisible = (visible) => {
+    loadingBar.visible = visible;
+    gageContainer.visible = visible;
+    loadingText.visible = visible;
+    for (let i = 0; i < dotSprites.length; i += 1) {
+      dotSprites[i].visible = visible && i < state.dotCount;
+    }
   };
 
   const resetVisuals = () => {
@@ -118,8 +142,13 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
     state.dotCount = 0;
     state.filledCount = 0;
     state.waitingComplete = false;
+    state.waitingTouch = false;
     state.completed = false;
+    state.touchBlinkElapsedMs = 0;
     title.y = TITLE_POS.y;
+    touchToStart.visible = false;
+    touchToStart.alpha = TOUCH_BLINK_MAX_ALPHA;
+    setLoadingVisualVisible(true);
 
     for (const dot of dotSprites) {
       dot.visible = false;
@@ -156,6 +185,15 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
     const phase = (state.titleFloatElapsedMs / TITLE_FLOAT_PERIOD_MS) * Math.PI * 2;
     title.y = TITLE_POS.y + Math.sin(phase) * TITLE_FLOAT_AMPLITUDE;
 
+    if (state.waitingTouch) {
+      state.touchBlinkElapsedMs += app.ticker.deltaMS;
+      const pulse =
+        (Math.sin((state.touchBlinkElapsedMs / TOUCH_BLINK_PERIOD_MS) * Math.PI * 2) + 1) * 0.5;
+      touchToStart.alpha =
+        TOUCH_BLINK_MIN_ALPHA + (TOUCH_BLINK_MAX_ALPHA - TOUCH_BLINK_MIN_ALPHA) * pulse;
+      return;
+    }
+
     if (state.completed) {
       return;
     }
@@ -178,10 +216,22 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
       if (state.completeElapsedMs >= LOADING_POST_FILL_DELAY_MS) {
         state.completed = true;
         state.waitingComplete = false;
-        onComplete?.();
+        state.waitingTouch = true;
+        setLoadingVisualVisible(false);
+        touchToStart.visible = true;
+        touchToStart.alpha = TOUCH_BLINK_MAX_ALPHA;
       }
     }
   };
+
+  frame.on('pointertap', () => {
+    if (!state.active || !state.waitingTouch) {
+      return;
+    }
+    state.waitingTouch = false;
+    touchToStart.visible = false;
+    onComplete?.();
+  });
 
   const onEnter = () => {
     resetVisuals();

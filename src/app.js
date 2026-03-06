@@ -29,7 +29,10 @@ const LOBBY_ASSET_PATHS = {
   back: './image/lobby/back.png',
   home: './image/lobby/home.png',
   pageButton: './image/lobby/page-button.png',
+  lobbyComingSoon: './image/lobby/page-comming-soon.png',
   lobbyCharacter: './image/lobby/character.png',
+  profileFrame1: './image/lobby/select_character_1.png',
+  profileFrame2: './image/lobby/select_character_2.png',
 };
 
 const LOBBY_HARD_ASSET_PATHS = {
@@ -56,6 +59,7 @@ const SPLASH_ASSET_PATHS = {
   splashGage: './image/splash/loading bar gauge.png',
   splashLoadingText: './image/splash/loading.png',
   splashDot: './image/splash/loading_dot.png',
+  splashTouchToStart: './image/splash/touch_to_start.png',
 };
 
 const POPUP_ASSET_PATHS = {
@@ -91,6 +95,11 @@ const CHARACTER_POPUP_ASSET_PATHS = {
   charPopArcher: './image/lobby-popup/archer.png',
   charPopMagician: './image/lobby-popup/magician.png',
   charPopThief: './image/lobby-popup/thief.png',
+  charPopLocked1: './image/lobby-popup/character select_1.png',
+  charPopLocked2: './image/lobby-popup/character select_2.png',
+  charPopLocked3: './image/lobby-popup/character select_3.png',
+  charPopLocked4: './image/lobby-popup/character select_4.png',
+  charPopLocked5: './image/lobby-popup/character select_5.png',
 };
 
 const bootstrap = async () => {

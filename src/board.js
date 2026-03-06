@@ -160,6 +160,10 @@ export class Board {
     return collected;
   }
 
+  getKeyCellSet() {
+    return new Set(this.keyCells);
+  }
+
   setPortalActive(active) {
     this.portalActive = active;
     if (this.portalSprite) {

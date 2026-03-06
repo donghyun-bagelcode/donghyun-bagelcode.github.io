@@ -44,6 +44,7 @@ export const ASSET_PATHS = {
   hudNum7: './image/common/num_7.png',
   hudNum8: './image/common/num_8.png',
   hudNum9: './image/common/num_9.png',
+  commonBack: './image/common/back.png',
 };
 
 export const OBJECT_SCALE = {

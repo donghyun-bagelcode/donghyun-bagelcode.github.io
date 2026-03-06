@@ -75,7 +75,11 @@ export class Player {
       return { moved: false, reason: 'animating', path: [] };
     }
 
-    const { dest, path } = this.findStopCell(direction.dx, direction.dy, options.stopAtCell);
+    const { dest, path } = this.findStopCell(direction.dx, direction.dy, options.stopAtCell, {
+      keyCells: options.keyCells,
+      keyGoal: options.keyGoal,
+      collectedCount: options.collectedCount,
+    });
     if (dest.x === this.gridX && dest.y === this.gridY) {
       return { moved: false, reason: 'blocked', path: [] };
     }
@@ -124,15 +128,39 @@ export class Player {
     this.setWalkFrame(walkStep);
   }
 
-  findStopCell(dx, dy, stopAtCell) {
+  findStopCell(dx, dy, stopAtCell, options = {}) {
     let nextX = this.gridX;
     let nextY = this.gridY;
     const path = [];
+    let simulatedCollected = options.collectedCount ?? 0;
+    const keyGoal = options.keyGoal ?? 0;
+    const keyCellSet = options.keyCells ?? null;
 
-    while (this.board.canStand(nextX + dx, nextY + dy)) {
-      nextX += dx;
-      nextY += dy;
+    while (true) {
+      const candidateX = nextX + dx;
+      const candidateY = nextY + dy;
+
+      if (!this.board.isInside(candidateX, candidateY) || this.board.isWall(candidateX, candidateY)) {
+        break;
+      }
+
+      const portalCell = this.board.portalCell;
+      const isPortal = portalCell && candidateX === portalCell.x && candidateY === portalCell.y;
+      if (isPortal && simulatedCollected < keyGoal) {
+        break;
+      }
+
+      nextX = candidateX;
+      nextY = candidateY;
       path.push({ x: nextX, y: nextY });
+
+      if (keyCellSet) {
+        const cellKey = `${nextX},${nextY}`;
+        if (keyCellSet.has(cellKey)) {
+          simulatedCollected += 1;
+        }
+      }
+
       if (stopAtCell && stopAtCell(nextX, nextY)) {
         break;
       }
