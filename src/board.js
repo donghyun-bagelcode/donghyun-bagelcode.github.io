@@ -1,14 +1,27 @@
-import { BOARD_PADDING, GRID_COLS, GRID_ROWS, TILE_GAP, TILE_SIZE } from './config.js';
+import { BOARD_PADDING, GRID_COLS, GRID_ROWS, TILE_GAP, TILE_SIZE, TRAIL_TUNING } from './config.js';
 import { getPixi } from './pixi.js';
 
+const BOARD_SCALE_RATIO = 1.15;
+const BOARD_Y_RATIO = 0.05;
+
 const wallKey = (x, y) => `${x},${y}`;
+const KEY_OBJECT_SCALE = 1;
+const BLOCK_OBJECT_SCALE = {
+  x: 1,
+  y: 1.1,
+};
 const OBJECT_SCALE = {
-  key: 0.96,
   portal: 1.66,
 };
 const OBJECT_OFFSET = {
   keyBottom: -0.08,
 };
+const OBJECT_Z_ORDER_BIAS = {
+  portal: 2,
+};
+const TRAIL_ALPHA = TRAIL_TUNING?.alpha ?? 0.5;
+const TRAIL_FADE_DURATION = TRAIL_TUNING?.fadeDurationMs ?? 400;
+const TRAIL_STAGGER_MS = TRAIL_TUNING?.staggerMs ?? 60;
 
 export class Board {
   constructor(stage, walls, keyCells, portalCell, textures) {
@@ -26,9 +39,11 @@ export class Board {
 
     this.container = new this.PIXI.Container();
     this.stage.addChild(this.container);
+    this.trailLayer = new this.PIXI.Container();
     this.objectLayer = new this.PIXI.Container();
     this.objectLayer.sortableChildren = true;
     this.portalSprite = null;
+    this.trailOverlays = new Set();
 
     this.gridPixelWidth = GRID_COLS * TILE_SIZE + (GRID_COLS - 1) * TILE_GAP;
     this.gridPixelHeight = GRID_ROWS * TILE_SIZE + (GRID_ROWS - 1) * TILE_GAP;
@@ -39,23 +54,23 @@ export class Board {
   }
 
   layout(viewWidth, viewHeight) {
-    const scaleX = (viewWidth * 0.95) / this.boardPixelWidth;
-    const scaleY = (viewHeight * 0.95) / this.boardPixelHeight;
+    const scaleX = (viewWidth * BOARD_SCALE_RATIO) / this.boardPixelWidth;
+    const scaleY = (viewHeight * BOARD_SCALE_RATIO) / this.boardPixelHeight;
     const boardScale = Math.min(scaleX, scaleY);
 
     this.container.scale.set(boardScale);
     this.container.x = Math.floor((viewWidth - this.boardPixelWidth * boardScale) * 0.5);
-    this.container.y = Math.floor(viewHeight * 0.05);
+    this.container.y = Math.floor(viewHeight * BOARD_Y_RATIO);
   }
 
   layoutInRect(rect) {
-    const scaleX = (rect.width * 0.95) / this.boardPixelWidth;
-    const scaleY = (rect.height * 0.95) / this.boardPixelHeight;
+    const scaleX = (rect.width * BOARD_SCALE_RATIO) / this.boardPixelWidth;
+    const scaleY = (rect.height * BOARD_SCALE_RATIO) / this.boardPixelHeight;
     const boardScale = Math.min(scaleX, scaleY);
 
     this.container.scale.set(boardScale);
     this.container.x = Math.floor(rect.x + (rect.width - this.boardPixelWidth * boardScale) * 0.5);
-    this.container.y = Math.floor(rect.y + rect.height * 0.05);
+    this.container.y = Math.floor(rect.y + rect.height * BOARD_Y_RATIO);
   }
 
   draw() {
@@ -79,16 +94,18 @@ export class Board {
 
         if (this.isWall(x, y)) {
           const wall = new this.PIXI.Sprite(this.textures.wall);
-          wall.width = TILE_SIZE;
-          wall.height = TILE_SIZE;
-          wall.x = world.x;
-          wall.y = world.y;
-          wall.zIndex = wall.y + TILE_SIZE;
+          wall.anchor.set(0.5, 0.5);
+          wall.width = TILE_SIZE * BLOCK_OBJECT_SCALE.x;
+          wall.height = TILE_SIZE * BLOCK_OBJECT_SCALE.y;
+          wall.x = world.x + TILE_SIZE * 0.5;
+          wall.y = world.y + TILE_SIZE * 0.5;
+          wall.zIndex = wall.y + wall.height * 0.5;
           this.objectLayer.addChild(wall);
         }
       }
     }
 
+    this.container.addChild(this.trailLayer);
     this.container.addChild(this.objectLayer);
     this.renderObjects();
   }
@@ -102,7 +119,7 @@ export class Board {
   renderKeys() {
     for (const key of this.keyCells) {
       const [x, y] = key.split(',').map(Number);
-      const keyGraphic = this.createObjectSprite(this.textures.key, OBJECT_SCALE.key);
+      const keyGraphic = this.createObjectSprite(this.textures.key, KEY_OBJECT_SCALE);
       keyGraphic.anchor.set(0.5, 1);
       const pos = this.toPixel(x, y);
       keyGraphic.x = pos.x + TILE_SIZE * 0.5;
@@ -121,7 +138,8 @@ export class Board {
     const pos = this.toPixel(this.portalCell.x, this.portalCell.y);
     portal.x = pos.x + TILE_SIZE * 0.5;
     portal.y = pos.y + TILE_SIZE * 0.5;
-    portal.zIndex = portal.y;
+    // 포탈은 중심이 아닌 하단 기준으로 정렬하고, 동률일 때 다른 오브젝트보다 위에 오르게 한다.
+    portal.zIndex = portal.y + portal.height * 0.5 + OBJECT_Z_ORDER_BIAS.portal;
     portal.boardObject = true;
     this.objectLayer.addChild(portal);
     this.portalSprite = portal;
@@ -177,7 +195,52 @@ export class Board {
     return pathCells.some((cell) => cell.x === this.portalCell.x && cell.y === this.portalCell.y);
   }
 
-  resetObjects() {
+  playTrail(pathCells, tweenManager) {
+    if (!pathCells || pathCells.length === 0 || !this.textures.trailTile || !tweenManager) {
+      return;
+    }
+
+    for (let i = 0; i < pathCells.length; i += 1) {
+      const cell = pathCells[i];
+      const pos = this.toPixel(cell.x, cell.y);
+      const overlay = new this.PIXI.Sprite(this.textures.trailTile);
+      overlay.width = TILE_SIZE;
+      overlay.height = TILE_SIZE;
+      overlay.x = pos.x;
+      overlay.y = pos.y;
+      overlay.alpha = TRAIL_ALPHA;
+      this.trailLayer.addChild(overlay);
+      this.trailOverlays.add(overlay);
+
+      const fadeDelay = i * TRAIL_STAGGER_MS;
+      tweenManager.to(overlay, { alpha: 0 }, TRAIL_FADE_DURATION, {
+        delay: fadeDelay,
+        onComplete: () => {
+          if (overlay.parent) {
+            overlay.parent.removeChild(overlay);
+          }
+          overlay.destroy();
+          this.trailOverlays.delete(overlay);
+        },
+      });
+    }
+  }
+
+  clearTrailOverlays(tweenManager = null) {
+    for (const overlay of this.trailOverlays) {
+      if (tweenManager) {
+        tweenManager.cancelAll(overlay);
+      }
+      if (overlay.parent) {
+        overlay.parent.removeChild(overlay);
+      }
+      overlay.destroy();
+    }
+    this.trailOverlays.clear();
+  }
+
+  resetObjects(tweenManager = null) {
+    this.clearTrailOverlays(tweenManager);
     this.keyCells = new Set(this.keyCellsInitial.map((cell) => wallKey(cell.x, cell.y)));
     this.portalActive = false;
     this.renderObjects();

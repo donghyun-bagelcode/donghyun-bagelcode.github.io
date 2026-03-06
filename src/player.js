@@ -1,19 +1,41 @@
-import { SLIDE_DURATION_MS, TILE_SIZE } from './config.js';
+import * as gameConfig from './config.js';
 import { getPixi } from './pixi.js';
 
+const PLAYER_MOVE_TUNING =
+  gameConfig.PLAYER_MOVE_TUNING ?? {
+    slideDurationMs: gameConfig.SLIDE_DURATION_MS ?? 260,
+    characterScale: 1.28,
+    characterBottomOffset: -0.04,
+    characterXOffset: -0.05,
+    characterZIndexBiasRatio: 0.5,
+    walkFrameStartCol: 1,
+    walkFrameCount: 3,
+    walkCycleCount: 2,
+  };
+const SLIDE_DURATION_MS = PLAYER_MOVE_TUNING.slideDurationMs ?? gameConfig.SLIDE_DURATION_MS ?? 260;
+const TILE_SIZE = gameConfig.TILE_SIZE ?? 64;
+const CHARACTER_ANCHOR =
+  gameConfig.CHARACTER_ANCHOR ?? {
+    knight: { x: 0.5, y: 0.5 },
+    thief: { x: 0.5, y: 0.5 },
+    archer: { x: 0.5, y: 0.5 },
+    magician: { x: 0.5, y: 0.5 },
+  };
+
 const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2);
-const CHARACTER_SCALE = 1.28;
-const CHARACTER_BOTTOM_OFFSET = -0.04;
-const CHARACTER_X_OFFSET = -0.05;
+const CHARACTER_SCALE = PLAYER_MOVE_TUNING.characterScale ?? 1.28;
+const CHARACTER_BOTTOM_OFFSET = PLAYER_MOVE_TUNING.characterBottomOffset ?? -0.04;
+const CHARACTER_X_OFFSET = PLAYER_MOVE_TUNING.characterXOffset ?? -0.05;
+const CHARACTER_Z_INDEX_BIAS = TILE_SIZE * (PLAYER_MOVE_TUNING.characterZIndexBiasRatio ?? 0.5);
 const SHEET_COLS = 4;
 const SHEET_ROWS = 4;
-const WALK_FRAME_START_COL = 1;
-const WALK_FRAME_COUNT = 3;
-const WALK_CYCLE_COUNT = 2;
+const WALK_FRAME_START_COL = PLAYER_MOVE_TUNING.walkFrameStartCol ?? 1;
+const WALK_FRAME_COUNT = PLAYER_MOVE_TUNING.walkFrameCount ?? 3;
+const WALK_CYCLE_COUNT = PLAYER_MOVE_TUNING.walkCycleCount ?? 2;
 const DIRECTION_ROWS = ['down', 'right', 'left', 'up'];
 
 export class Player {
-  constructor(board, startCell, textures, characterSheet) {
+  constructor(board, startCell, textures, characterSheet, characterId = 'knight') {
     this.board = board;
     this.PIXI = getPixi();
     if (!this.PIXI) {
@@ -33,7 +55,8 @@ export class Player {
     this.frames = this.buildAnimationFrames(characterSheet ?? this.textures.characterSheet);
 
     this.sprite = new this.PIXI.Sprite(this.frames.down[0]);
-    this.sprite.anchor.set(0.5, 1);
+    const charAnchor = CHARACTER_ANCHOR[characterId] ?? { x: 0.5, y: 1 };
+    this.sprite.anchor.set(charAnchor.x, charAnchor.y);
     this.applyObjectScale(this.sprite, CHARACTER_SCALE);
     this.board.objectLayer.addChild(this.sprite);
 
@@ -45,7 +68,7 @@ export class Player {
     const cell = this.board.toPixel(this.gridX, this.gridY);
     this.sprite.x = cell.x + TILE_SIZE * (0.5 + CHARACTER_X_OFFSET);
     this.sprite.y = cell.y + TILE_SIZE * (1 + CHARACTER_BOTTOM_OFFSET);
-    this.sprite.zIndex = this.sprite.y;
+    this.sprite.zIndex = this.sprite.y + CHARACTER_Z_INDEX_BIAS;
   }
 
   isAnimating() {
@@ -114,7 +137,7 @@ export class Player {
 
     this.sprite.x = this.fromPx.x + (this.toPx.x - this.fromPx.x) * eased;
     this.sprite.y = this.fromPx.y + (this.toPx.y - this.fromPx.y) * eased;
-    this.sprite.zIndex = this.sprite.y;
+    this.sprite.zIndex = this.sprite.y + CHARACTER_Z_INDEX_BIAS;
 
     if (normalized >= 1) {
       this.animating = false;

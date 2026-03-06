@@ -5,6 +5,26 @@ export const TILE_GAP = 0;
 export const BOARD_PADDING = 0;
 export const SLIDE_DURATION_MS = 260;
 
+// 캐릭터 이동/표시 튜닝값: 이동감, 위치, 워크 사이클을 한곳에서 조절
+export const PLAYER_MOVE_TUNING = {
+  slideDurationMs: 450,
+  characterScale: 1.28,
+  characterBottomOffset: -0.04,
+  characterXOffset: -0.05,
+  characterZIndexBiasRatio: 0.5,
+  walkFrameStartCol: 1,
+  walkFrameCount: 3,
+  walkCycleCount: 2,
+};
+
+// 슬라이드 트레일 튜닝값: 투명도/사라지는 속도/순차 간격
+export const TRAIL_TUNING = {
+  alpha: 0.5,
+  fadeDurationMs: 400,
+  staggerMs: 60,
+  triggerProgress: 0.7,
+};
+
 export const COLORS = {
   bg: 0xf0f2f5,
   floor: 0xdadfe5,
@@ -29,11 +49,14 @@ export const ASSET_PATHS = {
   portalOn: './image/ingame/portal_on.png',
   moveBoard: './image/ingame/move board.png',
   moveLabel: './image/ingame/MOVE.png',
+  stageLabel: './image/ingame/stage.png',
+  resetButton: './image/ingame/reset_button.png',
   key0Label: './image/ingame/Key_0.png',
   key1Label: './image/ingame/Key_1.png',
   key2Label: './image/ingame/Key_2.png',
   key3Label: './image/ingame/Key_3.png',
   keySlash: './image/ingame/key_slash.png',
+  keyFrame: './image/ingame/key_frame.png',
   hudNum0: './image/common/num_0.png',
   hudNum1: './image/common/num_1.png',
   hudNum2: './image/common/num_2.png',
@@ -51,6 +74,13 @@ export const OBJECT_SCALE = {
   character: 1.28,
   key: 1.18,
   portal: 1.36,
+};
+
+export const CHARACTER_ANCHOR = {
+  knight: { x: 0.5, y: 1 },
+  thief: { x: 0.45, y: 1 },
+  archer: { x: 0.45, y: 1 },
+  magician: { x: 0.5, y: 1 },
 };
 
 export const STAGES = [

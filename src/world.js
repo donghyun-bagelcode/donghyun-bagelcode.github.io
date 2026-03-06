@@ -1,11 +1,13 @@
 import { getPixi } from './pixi.js';
 import { clearProgress } from './save-data.js';
+import { AudioManager } from './audio.js';
+import { Easing, TweenManager } from './tween.js';
 
 const DESIGN_W = 1080;
 const DESIGN_H = 1920;
 
 const TITLE_Y = 126;
-const TITLE_W = 500;
+const TITLE_W = 700;
 const BANNER_W = 840;
 const BANNER_FIRST_BOTTOM_Y = 520;
 const BANNER_STACK_GAP = 28;
@@ -30,6 +32,7 @@ export const createWorldScene = ({ app, textures, onSelectWorld }) => {
 
   const container = new PIXI.Container();
   container.visible = false;
+  const tweens = new TweenManager(app.ticker);
 
   const frame = new PIXI.Container();
   container.addChild(frame);
@@ -76,11 +79,40 @@ export const createWorldScene = ({ app, textures, onSelectWorld }) => {
     sprite.position.set(DESIGN_W * 0.5, bottomY);
     prevBottomY = sprite.y;
     sprite.eventMode = 'static';
-    sprite.cursor = meta.playable ? 'pointer' : 'default';
+    sprite.cursor = 'pointer';
+
+    const playTapPop = () => {
+      const baseScaleX = sprite.scale.x;
+      const baseScaleY = sprite.scale.y;
+      tweens.cancelAll(sprite.scale);
+      sprite.scale.set(baseScaleX * 0.96, baseScaleY * 0.96);
+      tweens.to(sprite.scale, { x: baseScaleX, y: baseScaleY }, 120, { easing: Easing.backOut });
+    };
+
+    const playLockedShake = () => {
+      const origX = sprite.x;
+      tweens.cancelAll(sprite);
+      tweens.to(sprite, { x: origX + 8 }, 45, {
+        onComplete: () =>
+          tweens.to(sprite, { x: origX - 6 }, 45, {
+            onComplete: () => tweens.to(sprite, { x: origX }, 45),
+          }),
+      });
+    };
+
     if (meta.playable) {
       sprite.on('pointertap', () => {
         if (!dragState.moved) {
+          AudioManager.playSfx('ui/sfx-ui-tap-01.mp3', { volume: 0.5 });
+          playTapPop();
           onSelectWorld?.(meta.id);
+        }
+      });
+    } else {
+      sprite.on('pointertap', () => {
+        if (!dragState.moved) {
+          AudioManager.playSfx('ui/sfx-ui-lock-denied-01.mp3', { volume: 0.6 });
+          playLockedShake();
         }
       });
     }
@@ -164,16 +196,21 @@ export const createWorldScene = ({ app, textures, onSelectWorld }) => {
   return {
     container,
     onEnter: () => {
+      AudioManager.playBgm('bgm/BGM-02_World list.mp3');
       recalcScrollBounds();
       onResize();
     },
     onExit: () => {
+      AudioManager.stopBgm();
       dragState.active = false;
       dragState.moved = false;
     },
     onResize: () => {
       recalcScrollBounds();
       onResize();
+    },
+    destroy: () => {
+      tweens.destroy();
     },
   };
 };

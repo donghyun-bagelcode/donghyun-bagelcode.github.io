@@ -1,10 +1,14 @@
 import { STAGE_COUNT, STAGE_COUNT_HARD } from './config.js';
 
 const SAVE_KEY = 'keyroute-save';
+const DEFAULT_CHARACTER_ID = 'knight';
+const VALID_CHARACTER_IDS = new Set(['knight', 'thief', 'archer', 'magician']);
 
-const createDefaultProgress = () => ({ basic: {}, hard: {} });
+const createDefaultProgress = () => ({ basic: {}, hard: {}, selectedCharacterId: DEFAULT_CHARACTER_ID });
 
 const clampStars = (stars) => Math.max(0, Math.min(3, Math.floor(Number(stars) || 0)));
+const normalizeCharacterId = (characterId) =>
+  typeof characterId === 'string' && VALID_CHARACTER_IDS.has(characterId) ? characterId : DEFAULT_CHARACTER_ID;
 
 const getStageCountByMode = (mode) => (mode === 'hard' ? STAGE_COUNT_HARD : STAGE_COUNT);
 const normalizeMode = (mode) => (mode === 'hard' ? 'hard' : 'basic');
@@ -53,7 +57,11 @@ export const loadProgress = () => {
       normalizedHard[key] = clampStars(hardSource[key]);
     }
 
-    return { basic: normalizedBasic, hard: normalizedHard };
+    return {
+      basic: normalizedBasic,
+      hard: normalizedHard,
+      selectedCharacterId: normalizeCharacterId(migrated.selectedCharacterId),
+    };
   } catch {
     return createDefaultProgress();
   }
@@ -104,4 +112,17 @@ export const clearProgress = () => {
   } catch {
     // 스토리지 접근 실패 시에도 흐름을 유지한다.
   }
+};
+
+export const loadSelectedCharacter = () => {
+  const progress = loadProgress();
+  return normalizeCharacterId(progress.selectedCharacterId);
+};
+
+export const saveSelectedCharacter = (characterId) => {
+  const progress = loadProgress();
+  const normalized = normalizeCharacterId(characterId);
+  progress.selectedCharacterId = normalized;
+  saveProgress(progress);
+  return normalized;
 };

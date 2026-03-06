@@ -1,11 +1,20 @@
 import { ASSET_PATHS } from './config.js';
+import { AudioManager } from './audio.js';
 import { createGameScene } from './game.js';
 import { createLobbyScene } from './lobby.js';
-import { getTotalStars, getUnlockedStageId, loadProgress, saveStageResult } from './save-data.js';
+import * as saveData from './save-data.js';
 import { createSplashScene } from './splash.js';
 import { createWorldScene } from './world.js';
 import { getPixi, waitForPixi } from './pixi.js';
 import { SceneManager } from './scene-manager.js';
+
+const loadProgress = saveData.loadProgress ?? (() => ({ basic: {}, hard: {} }));
+const getUnlockedStageId = saveData.getUnlockedStageId ?? (() => 1);
+const getTotalStars = saveData.getTotalStars ?? (() => 0);
+const saveStageResult = saveData.saveStageResult ?? (() => ({}));
+const loadSelectedCharacter = saveData.loadSelectedCharacter ?? (() => 'knight');
+const saveSelectedCharacter =
+  saveData.saveSelectedCharacter ?? ((characterId) => (typeof characterId === 'string' ? characterId : 'knight'));
 
 const LOBBY_ASSET_PATHS = {
   lobbyBg: './image/lobby/bg.png',
@@ -24,6 +33,7 @@ const LOBBY_ASSET_PATHS = {
   num7: './image/lobby/num_7.png',
   num8: './image/lobby/num_8.png',
   num9: './image/lobby/num_9.png',
+  slash: './image/lobby/slash.png',
   starCollect: './image/lobby/star-collect.png',
   star: './image/lobby/star.png',
   back: './image/lobby/back.png',
@@ -102,17 +112,26 @@ const CHARACTER_POPUP_ASSET_PATHS = {
   charPopLocked5: './image/lobby-popup/character select_5.png',
 };
 
+const INGAME_FX_ASSET_PATHS = {
+  trailTile: './image/ingame/character-move-color-tile.png',
+};
+
 const bootstrap = async () => {
   const root = document.getElementById('app');
   if (!root) {
     throw new Error('app container(#app)을 찾지 못했습니다.');
   }
 
+  AudioManager.installUnlockOnFirstGesture();
+  AudioManager.installDebugHotkey('F8');
+  AudioManager.setDebugVisible(false);
+
   const app = await createPixiApp(root);
   root.appendChild(app.canvas ?? app.view);
 
   const textures = await loadTextures({
     ...ASSET_PATHS,
+    ...INGAME_FX_ASSET_PATHS,
     ...LOBBY_ASSET_PATHS,
     ...LOBBY_HARD_ASSET_PATHS,
     ...WORLD_ASSET_PATHS,
@@ -122,7 +141,7 @@ const bootstrap = async () => {
   });
 
   const sceneManager = new SceneManager(app.stage);
-  let selectedCharacterId = 'knight';
+  let selectedCharacterId = loadSelectedCharacter();
 
   const splashScene = createSplashScene({
     app,
@@ -140,6 +159,7 @@ const bootstrap = async () => {
     app,
     root,
     textures,
+    getCharacterId: () => selectedCharacterId,
     getCharacterSheet: () => {
       const sheetMap = {
         knight: textures.charSheetKnight,
@@ -168,7 +188,7 @@ const bootstrap = async () => {
       };
     },
     onCharacterSelect: (id) => {
-      selectedCharacterId = id;
+      selectedCharacterId = saveSelectedCharacter(id);
     },
     getSelectedCharacter: () => selectedCharacterId,
     onGoWorld: () => sceneManager.switchScene('world'),

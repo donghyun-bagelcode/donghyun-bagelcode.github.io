@@ -1,5 +1,16 @@
 import { getPixi } from './pixi.js';
-import { STAGE_COUNT } from './config.js';
+import * as gameConfig from './config.js';
+import { AudioManager } from './audio.js';
+import { Easing, TweenManager } from './tween.js';
+
+const STAGE_COUNT = gameConfig.STAGE_COUNT ?? gameConfig.STAGES?.length ?? 10;
+const CHARACTER_ANCHOR =
+  gameConfig.CHARACTER_ANCHOR ?? {
+    knight: { x: 0.5, y: 0.5 },
+    thief: { x: 0.5, y: 0.5 },
+    archer: { x: 0.5, y: 0.5 },
+    magician: { x: 0.5, y: 0.5 },
+  };
 
 const DESIGN_W = 1080;
 const DESIGN_H = 1920;
@@ -20,45 +31,45 @@ const STAGE_POS = {
 };
 
 const UI_POS = {
-  worldTitle: { x: 540, y: 173 },
-  starBar: { x: 540, y: 307 },
+  worldTitle: { x: 540, y: 153 },
+  starBar: { x: 540, y: 280 },
   back: { x: 65, y: 115 },
-  home: { x: 151, y: 115 },
+  home: { x: 151, y: 105 },
   page: { x: 994, y: 960 },
 };
 
 const STAR_COUNTER_UI = {
   offsetX: 40,
   offsetY: 0,
-  digitH: 48,
-  itemGap: 8,
-  slashFontSize: 40,
-  slashColor: 0xffffff,
-  slashStroke: 0x1f2937,
-  slashStrokeThickness: 6,
+  digitH: 70,
+  itemGap: 2,
 };
 
-const STAGE_BUTTON_W = 184;
-const STAGE_BUTTON_W_SMALL = 168;
-const STAGE_NUMBER_W = 62;
-const STAGE_NUMBER_H = 62;
-const STAGE_NUMBER_10_H = 72;
+const STAGE_BUTTON_W = 170;
+const STAGE_BUTTON_W_CURRENT = 200;
+const STAGE_BUTTON_W_SMALL = 150;
+const STAGE_NUMBER_W = 52;
+const STAGE_NUMBER_H = 52;
+const STAGE_NUMBER_10_H = 68;
 const STAGE_NUMBER_10_GAP = 0.52;
 const STAGE_NUMBER_Y_OFFSET = -18;
-const STAGE_STAR_W = 52;
-const STAGE_STAR_GAP = 40;
-const STAGE_STAR_Y_OFFSET = -80;
+const STAGE_STAR_W = 67;
+const STAGE_STAR_GAP = 55;
+const STAGE_STAR_Y_OFFSET = -100;
 const TOP_BACK_ICON_W = 66;
-const TOP_HOME_ICON_W = 80;
-const PAGE_BUTTON_W = 108;
+const TOP_HOME_ICON_W = 110;
+const PAGE_BUTTON_W = 158;
 const PAGE_BACK_POS = { x: 86, y: 960 };
 const COMING_SOON_W = DESIGN_W;
 const PROFILE_ICON_POS = { x: 980, y: 115 };
 const PROFILE_ICON_RADIUS = 120;
-const PROFILE_FRAME_W = PROFILE_ICON_RADIUS * 2 + 16;
+const PROFILE_FRAME_W = PROFILE_ICON_RADIUS * 2 + 10;
+const PROFILE_FRAME_OFFSET = { x: -30, y: 340 };
 const PROFILE_PORTRAIT_W = PROFILE_ICON_RADIUS * 2 - 16;
-const PROFILE_BADGE_W = 56;
-const PROFILE_BADGE_OFFSET = { x: -80, y: 60 };
+const PROFILE_PORTRAIT_ANCHOR = { x: 0.5, y: 0.25 };
+const PROFILE_PORTRAIT_OFFSET = { x: -45, y: 320 };
+const PROFILE_BADGE_W = 130;
+const PROFILE_BADGE_OFFSET = { x: 10, y: 390 };
 const SELECT_CHARACTER_H = 220;
 const SELECT_CHARACTER_X_OFFSET = -10;
 const SELECT_CHARACTER_STAND_OFFSET_Y = 0;
@@ -68,28 +79,31 @@ const CHARACTER_POPUP_UI = {
   centerY: 960,
   popupScaleX: 1,
   popupScaleY: 1,
-  titleW: 420,
+  titleW: 650,
   titleX: 0,
-  titleY: -472,
+  titleY: -532,
   titleScaleX: 1,
   titleScaleY: 1,
-  closeW: 52,
-  closeX: 378,
-  closeY: -524,
+  closeW: 160,
+  closeX: 398,
+  closeY: -604,
   closeScaleX: 1,
   closeScaleY: 1,
-  okW: 220,
+  okW: 310,
   okX: 0,
-  okY: 485,
+  okY: 620,
   okScaleX: 1,
   okScaleY: 1,
-  slotW: 220,
-  slotGapX: 16,
-  slotGapY: 40,
-  gridTopY: -300,
-  starsW: 26,
-  starsGap: 28,
-  portraitScale: 0.85,
+  slotW: 255,
+  slotGapX: 8,
+  slotGapY: 85,
+  gridTopY: -320,
+  portraitScale: 0.95,
+  portraitScaleX: 1,
+  portraitScaleY: 1,
+  portraitOffsetX: 0,
+  portraitOffsetYRatio: -0.06,
+  portraitOffsetY: 110,
 };
 const CHARACTER_GRID_SLOT_TOTAL = 9;
 const CHARACTER_LIST = [
@@ -126,6 +140,7 @@ export const createLobbyScene = ({
 
   const container = new PIXI.Container();
   container.visible = false;
+  const tweens = new TweenManager(app.ticker);
   let currentMode = 'basic';
   let currentPage = 1;
 
@@ -206,7 +221,7 @@ export const createLobbyScene = ({
   frame.addChild(pageBackButton);
 
   const stageNodes = STAGE_META.map((meta) =>
-    createStageNode(PIXI, textures, meta.id, (stageId) => onSelectStage?.(stageId, currentMode))
+    createStageNode(PIXI, textures, meta.id, (stageId) => onSelectStage?.(stageId, currentMode), tweens)
   );
 
   for (const node of stageNodes) {
@@ -245,17 +260,20 @@ export const createLobbyScene = ({
   const profileFrame = new PIXI.Sprite(textures.profileFrame1);
   profileFrame.anchor.set(0.5, 0.5);
   fitByWidth(profileFrame, PROFILE_FRAME_W);
+  profileFrame.position.set(PROFILE_FRAME_OFFSET.x, PROFILE_FRAME_OFFSET.y);
   profileIconContainer.addChild(profileFrame);
 
   const profileMask = new PIXI.Graphics();
   profileMask.beginFill(0xffffff);
   profileMask.drawCircle(0, 0, PROFILE_ICON_RADIUS);
   profileMask.endFill();
+  profileMask.position.set(PROFILE_PORTRAIT_OFFSET.x, PROFILE_PORTRAIT_OFFSET.y);
   profileIconContainer.addChild(profileMask);
 
   const profilePortrait = new PIXI.Sprite(textures.charPopKnight);
-  profilePortrait.anchor.set(0.5, 0.25);
+  profilePortrait.anchor.set(PROFILE_PORTRAIT_ANCHOR.x, PROFILE_PORTRAIT_ANCHOR.y);
   fitByWidth(profilePortrait, PROFILE_PORTRAIT_W);
+  profilePortrait.position.set(PROFILE_PORTRAIT_OFFSET.x, PROFILE_PORTRAIT_OFFSET.y);
   profilePortrait.mask = profileMask;
   profileIconContainer.addChild(profilePortrait);
 
@@ -266,7 +284,11 @@ export const createLobbyScene = ({
   profileIconContainer.addChild(profileBadge);
 
   profileIconContainer.eventMode = 'static';
-  profileIconContainer.hitArea = new PIXI.Circle(0, 0, PROFILE_ICON_RADIUS + 10);
+  profileIconContainer.hitArea = new PIXI.Circle(
+    PROFILE_PORTRAIT_OFFSET.x,
+    PROFILE_PORTRAIT_OFFSET.y,
+    PROFILE_ICON_RADIUS + 10
+  );
   profileIconContainer.cursor = 'pointer';
 
   let selectedCharacterId = normalizeCharacterId(getSelectedCharacter?.());
@@ -361,21 +383,40 @@ export const createLobbyScene = ({
   const applyCharacterBadge = () => {
     const textureKey = CHARACTER_TEXTURE_BY_ID[selectedCharacterId];
     const texture = textures[textureKey] ?? textures.lobbyCharacter;
+    const charAnchor = CHARACTER_ANCHOR[selectedCharacterId] ?? { x: 0.5, y: 0.5 };
     characterBadge.texture = texture;
+    characterBadge.anchor.set(charAnchor.x, charAnchor.y);
     fitByHeight(characterBadge, SELECT_CHARACTER_H);
     profilePortrait.texture = textures[textureKey] ?? textures.charPopKnight;
-    profilePortrait.anchor.set(0.5, 0.25);
+    profilePortrait.anchor.set(PROFILE_PORTRAIT_ANCHOR.x, PROFILE_PORTRAIT_ANCHOR.y);
     fitByWidth(profilePortrait, PROFILE_PORTRAIT_W);
+    profilePortrait.position.set(PROFILE_PORTRAIT_OFFSET.x, PROFILE_PORTRAIT_OFFSET.y);
+    profileMask.position.set(PROFILE_PORTRAIT_OFFSET.x, PROFILE_PORTRAIT_OFFSET.y);
   };
 
   const openCharacterPopup = () => {
+    if (charPopupContainer.visible) {
+      return;
+    }
     pendingCharacterId = selectedCharacterId;
     refreshCharacterPopupSelection();
     charPopupContainer.visible = true;
+    charPopupRoot.scale.set(0.01);
+    tweens.cancelAll(charPopupRoot.scale);
+    tweens.to(charPopupRoot.scale, { x: 1, y: 1 }, 180, { easing: Easing.backOut });
   };
 
   const closeCharacterPopup = () => {
-    charPopupContainer.visible = false;
+    if (!charPopupContainer.visible) {
+      return;
+    }
+    tweens.cancelAll(charPopupRoot.scale);
+    tweens.to(charPopupRoot.scale, { x: 0.01, y: 0.01 }, 150, {
+      easing: Easing.easeIn,
+      onComplete: () => {
+        charPopupContainer.visible = false;
+      },
+    });
   };
 
   profileIconContainer.on('pointertap', () => {
@@ -460,10 +501,17 @@ export const createLobbyScene = ({
   });
 
   const applyPage = () => {
+    const isPage1 = currentPage === 1;
     page1Container.visible = currentPage === 1;
     page2Container.visible = currentPage === 2;
     pageButton.visible = currentPage === 1;
     pageBackButton.visible = currentPage === 2;
+    profileIconContainer.visible = isPage1;
+    profileIconContainer.eventMode = isPage1 ? 'static' : 'none';
+    profileIconContainer.cursor = isPage1 ? 'pointer' : 'default';
+    if (!isPage1) {
+      closeCharacterPopup();
+    }
   };
 
   pageButton.on('pointertap', () => {
@@ -483,19 +531,21 @@ export const createLobbyScene = ({
   return {
     container,
     onEnter: () => {
+      AudioManager.playBgm('bgm/BGM-03_stage world 1.mp3');
       currentPage = 1;
       applyPage();
       applyMode();
       onResize();
     },
     onExit: () => {
+      AudioManager.stopBgm();
       closeCharacterPopup();
     },
     onResize,
   };
 };
 
-const createStageNode = (PIXI, textures, stageId, onSelectStage) => {
+const createStageNode = (PIXI, textures, stageId, onSelectStage, tweens) => {
   const buttonTexture = pickStageTexture(textures, 'locked');
   const button = new PIXI.Sprite(buttonTexture);
   button.anchor.set(0.5, 0.5);
@@ -544,6 +594,12 @@ const createStageNode = (PIXI, textures, stageId, onSelectStage) => {
   const node = { id: stageId, status: 'locked', playable: false, button, numberSprite, numberText, starContainer };
   button.on('pointertap', () => {
     if (node.playable) {
+      const baseScaleX = node.button.scale.x;
+      const baseScaleY = node.button.scale.y;
+      button.scale.set(baseScaleX * 0.92, baseScaleY * 0.92);
+      tweens.cancelAll(button.scale);
+      tweens.to(button.scale, { x: baseScaleX, y: baseScaleY }, 100, { easing: Easing.backOut });
+      AudioManager.playSfx('ui/sfx-ui-tap-01.mp3', { volume: 0.5 });
       onSelectStage?.(node.id);
     }
   });
@@ -554,7 +610,9 @@ const applyStageNodeState = (node, textures, status, playable, stars) => {
   node.status = status;
   node.playable = playable;
   node.button.texture = pickStageTexture(textures, status);
-  fitByWidth(node.button, status === 'clear' ? STAGE_BUTTON_W : STAGE_BUTTON_W_SMALL);
+  const buttonW =
+    status === 'clear' ? STAGE_BUTTON_W : status === 'current' ? STAGE_BUTTON_W_CURRENT : STAGE_BUTTON_W_SMALL;
+  fitByWidth(node.button, buttonW);
   node.button.alpha = playable ? 1 : 0.94;
   node.button.cursor = playable ? 'pointer' : 'default';
 
@@ -613,18 +671,18 @@ const createCharacterSlot = (PIXI, textures, character) => {
   container.addChild(frame);
 
   const portrait = new PIXI.Sprite(textures[character.textureKey]);
-  portrait.anchor.set(0.5, 0.5);
+  const charAnchor = CHARACTER_ANCHOR[character.id] ?? { x: 0.5, y: 0.5 };
+  portrait.anchor.set(charAnchor.x, charAnchor.y);
   fitByHeight(portrait, CHARACTER_POPUP_UI.slotW * CHARACTER_POPUP_UI.portraitScale);
-  portrait.position.set(0, -CHARACTER_POPUP_UI.slotW * 0.06);
+  portrait.scale.set(
+    portrait.scale.x * CHARACTER_POPUP_UI.portraitScaleX,
+    portrait.scale.y * CHARACTER_POPUP_UI.portraitScaleY
+  );
+  portrait.position.set(
+    CHARACTER_POPUP_UI.portraitOffsetX,
+    CHARACTER_POPUP_UI.slotW * CHARACTER_POPUP_UI.portraitOffsetYRatio + CHARACTER_POPUP_UI.portraitOffsetY
+  );
   container.addChild(portrait);
-
-  for (let i = 0; i < 3; i += 1) {
-    const star = new PIXI.Sprite(textures.charPopStar);
-    star.anchor.set(0.5, 0.5);
-    fitByWidth(star, CHARACTER_POPUP_UI.starsW);
-    star.position.set((i - 1) * CHARACTER_POPUP_UI.starsGap, CHARACTER_POPUP_UI.slotW * 0.33);
-    container.addChild(star);
-  }
 
   return { container, frame, characterId: character.id };
 };
@@ -647,15 +705,9 @@ const renderStarCounter = (PIXI, container, textures, value, maxValue) => {
       continue;
     }
 
-    const slash = new PIXI.Text(ch, {
-      fontFamily: 'Avenir Next, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
-      fontWeight: '800',
-      fontSize: STAR_COUNTER_UI.slashFontSize,
-      fill: STAR_COUNTER_UI.slashColor,
-      stroke: STAR_COUNTER_UI.slashStroke,
-      strokeThickness: STAR_COUNTER_UI.slashStrokeThickness,
-    });
+    const slash = new PIXI.Sprite(textures.slash);
     slash.anchor.set(0.5, 0.5);
+    fitByHeight(slash, STAR_COUNTER_UI.digitH);
     items.push(slash);
     totalWidth += slash.width;
   }

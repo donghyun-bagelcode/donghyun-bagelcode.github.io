@@ -1,4 +1,5 @@
 import { getPixi } from './pixi.js';
+import { AudioManager } from './audio.js';
 
 const DESIGN_W = 1080;
 const DESIGN_H = 1920;
@@ -236,6 +237,7 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
   const onEnter = () => {
     resetVisuals();
     state.active = true;
+    AudioManager.playBgm('bgm/BGM-01_splash.mp3');
     if (!state.tickerAttached) {
       app.ticker.add(tickerUpdate);
       state.tickerAttached = true;
@@ -245,6 +247,7 @@ export const createSplashScene = ({ app, textures, onComplete }) => {
 
   const onExit = () => {
     state.active = false;
+    AudioManager.stopBgm();
     title.y = TITLE_POS.y;
     if (state.tickerAttached) {
       app.ticker.remove(tickerUpdate);
